@@ -11,6 +11,7 @@ Each migration file follows the naming convention: `XXX_description.sql`
 - `003_create_quiz_sessions_table.sql` - Creates the quiz_sessions table
 - `004_create_quiz_participants_table.sql` - Creates the quiz_participants table
 - `005_create_answers_table.sql` - Creates the answers table
+- `006_enable_realtime_filters.sql` - Enables RLS with policies for Realtime to work
 
 ## Structure
 
@@ -54,16 +55,20 @@ Migrations should be applied in numerical order:
 3. `003_create_quiz_sessions_table.sql` (depends on players)
 4. `004_create_quiz_participants_table.sql` (depends on quiz_sessions and players)
 5. `005_create_answers_table.sql` (depends on quiz_sessions, questions, and players)
+6. `006_enable_realtime_filters.sql` (enables RLS policies for Realtime)
 
 ## Enabling Realtime
 
-After applying migrations, enable Realtime subscriptions in Supabase:
+For Realtime `postgres_changes` to work, you need:
 
-1. Go to Database > Replication
-2. Enable replication for:
+1. **Add tables to publication**: Go to Database > Replication, enable for:
    - `quiz_sessions` table
    - `quiz_participants` table
    - `answers` table
+
+2. **Enable RLS with SELECT policies**: Run migration `006_enable_realtime_filters.sql`
+   - This enables Row Level Security on the tables
+   - Creates SELECT policies that allow the realtime system to read changes
 
 ## Notes
 

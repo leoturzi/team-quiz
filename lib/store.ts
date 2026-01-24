@@ -456,9 +456,6 @@ class QuizStore {
 
     const channel = this.supabase
       .channel(`quiz-session-${sessionId}`)
-      .on('system', {}, (payload) => {
-        console.log('[Realtime] System event:', payload)
-      })
       .on(
         'postgres_changes',
         {
@@ -467,14 +464,12 @@ class QuizStore {
           table: 'quiz_sessions',
         },
         async (payload) => {
-          console.log('[Realtime] quiz_sessions change received:', payload)
-          // Filter in callback instead of in subscription
+          // Filter in callback since subscription filters require specific RLS setup
           const data = payload.new as any
           if (!data || data.id !== sessionId) return
           
           if (payload.eventType === 'UPDATE') {
             const sessionData = data
-            console.log('[Realtime] Session update data:', sessionData)
             const session: QuizSession = {
               id: sessionData.id,
               lobbyCode: sessionData.lobby_code,
@@ -487,7 +482,6 @@ class QuizStore {
               endedAt: sessionData.ended_at ? new Date(sessionData.ended_at) : undefined,
             }
             this.sessions.set(session.id, session)
-            console.log('[Realtime] Updated session in store, notifying listeners')
             this.notify()
           }
         }
@@ -500,17 +494,13 @@ class QuizStore {
           table: 'quiz_participants',
         },
         async (payload) => {
-          console.log('[Realtime] quiz_participants change received:', payload)
-          // Filter in callback instead of in subscription
+          // Filter in callback since subscription filters require specific RLS setup
           const data = payload.new as any
           if (!data || data.quiz_session_id !== sessionId) return
           
           if (payload.eventType === 'INSERT') {
             const participantData = data
-            console.log('[Realtime] New participant data:', participantData)
-            // Fetch player alias
             const player = await playerActions.getPlayerById(participantData.player_id)
-            console.log('[Realtime] Fetched player:', player)
             const participant: QuizParticipant = {
               id: participantData.id,
               quizSessionId: participantData.quiz_session_id,
@@ -519,7 +509,6 @@ class QuizStore {
               joinedAt: new Date(participantData.joined_at),
             }
             this.participants.set(participant.id, participant)
-            console.log('[Realtime] Added participant to store, notifying listeners')
             this.notify()
           }
         }
@@ -532,7 +521,7 @@ class QuizStore {
           table: 'answers',
         },
         async (payload) => {
-          // Filter in callback instead of in subscription
+          // Filter in callback since subscription filters require specific RLS setup
           const data = payload.new as any
           if (!data || data.quiz_session_id !== sessionId) return
           
@@ -552,17 +541,7 @@ class QuizStore {
           }
         }
       )
-      .subscribe((status, err) => {
-        if (status === 'SUBSCRIBED') {
-          console.log(`[Realtime] Subscribed to session ${sessionId}`)
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error(`[Realtime] Channel error for session ${sessionId}:`, err)
-        } else if (status === 'TIMED_OUT') {
-          console.error(`[Realtime] Subscription timed out for session ${sessionId}`)
-        } else if (status === 'CLOSED') {
-          console.log(`[Realtime] Channel closed for session ${sessionId}`)
-        }
-      })
+      .subscribe()
 
     this.activeChannels.set(sessionId, channel)
 
