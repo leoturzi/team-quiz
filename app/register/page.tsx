@@ -39,23 +39,33 @@ function RegisterContent() {
     }
 
     setIsChecking(true)
-    const timer = setTimeout(() => {
-      const available = store.isAliasAvailable(alias)
-      setIsAvailable(available)
-      setIsChecking(false)
+    const timer = setTimeout(async () => {
+      try {
+        const available = await store.isAliasAvailable(alias)
+        setIsAvailable(available)
+      } catch (error) {
+        console.error('Failed to check alias:', error)
+        setIsAvailable(null)
+      } finally {
+        setIsChecking(false)
+      }
     }, 300)
 
     return () => clearTimeout(timer)
   }, [alias])
 
-  const handleRedirect = () => {
+  const handleRedirect = async () => {
     if (redirect === 'create') {
       const playerId = localStorage.getItem('quiz_player_id')
       const playerAlias = localStorage.getItem('quiz_alias')
       if (playerId && playerAlias) {
-        const session = store.createSession(playerId)
-        store.joinSession(session.id, playerId, playerAlias)
-        router.push(`/lobby/${session.lobbyCode}`)
+        try {
+          const session = await store.createSession(playerId)
+          await store.joinSession(session.id, playerId, playerAlias)
+          router.push(`/lobby/${session.lobbyCode}`)
+        } catch (error) {
+          console.error('Failed to create session:', error)
+        }
       }
     } else if (redirect === 'join' && code) {
       router.push(`/lobby/${code}`)
@@ -86,10 +96,10 @@ function RegisterContent() {
     setIsSubmitting(true)
 
     try {
-      const player = store.createPlayer(alias)
+      const player = await store.createPlayer(alias)
       localStorage.setItem('quiz_alias', alias)
       localStorage.setItem('quiz_player_id', player.id)
-      handleRedirect()
+      await handleRedirect()
     } catch {
       setError('Failed to register. Please try again.')
       setIsSubmitting(false)

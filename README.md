@@ -18,19 +18,26 @@ A quiz game where:
 ## Tech Stack
 
 - **Framework**: Next.js 16 with TypeScript
+- **Database & Backend**: Supabase (PostgreSQL + Realtime)
 - **Styling**: Tailwind CSS 4.x
 - **UI Components**: shadcn/ui (Radix UI primitives)
-- **State Management**: In-memory store (current) / Supabase (planned)
-- **Real-time**: In-memory subscriptions (current) / Supabase Realtime (planned)
+- **State Management**: Supabase with server actions
+- **Real-time**: Supabase Realtime subscriptions
 - **Deployment**: Vercel (with Analytics)
 
 ## Current Implementation Status
 
-⚠️ **Note**: The current implementation uses an **in-memory store** (`lib/store.ts`) for demo and development purposes. This means:
-- Data persists only during the browser session
-- Multiple users on different devices won't see each other's data
-- Perfect for local development and testing
-- **Production-ready Supabase integration is planned** (see Database Schema section below)
+✅ **Supabase Infrastructure**: The project includes:
+- Database schema migrations in `/migrations` folder
+- Supabase client utilities (`lib/supabase/`)
+- Server actions for all database operations (`actions/`)
+- Type-safe database types (`lib/supabase/types.ts`)
+
+⚠️ **Migration Status**: The app currently uses an **in-memory store** (`lib/store.ts`) for demo purposes. To complete the migration:
+1. Set up a Supabase project
+2. Run the migration files in order
+3. Update components to use server actions instead of the store
+4. Enable Realtime subscriptions for live updates
 
 ### Demo Mode
 The app includes a "Try Demo" feature that seeds mock data including:
@@ -115,9 +122,26 @@ gdp-quiz-game/
 │   └── use-toast.ts
 │
 ├── lib/
-│   ├── store.ts                 # In-memory data store
+│   ├── store.ts                 # In-memory data store (legacy, being migrated)
 │   ├── types.ts                 # TypeScript type definitions
-│   └── utils.ts                  # Utility functions
+│   ├── utils.ts                 # Utility functions
+│   └── supabase/
+│       ├── client.ts            # Browser Supabase client
+│       ├── server.ts            # Server Supabase client
+│       └── types.ts             # Generated database types
+│
+├── actions/                     # Server actions
+│   ├── players.ts               # Player operations
+│   ├── questions.ts             # Question operations
+│   └── quiz.ts                  # Quiz session operations
+│
+├── migrations/                  # Database migrations
+│   ├── 001_create_players_table.sql
+│   ├── 002_create_questions_table.sql
+│   ├── 003_create_quiz_sessions_table.sql
+│   ├── 004_create_quiz_participants_table.sql
+│   ├── 005_create_answers_table.sql
+│   └── README.md
 │
 ├── public/                      # Static assets
 ├── styles/                      # Global styles
@@ -151,7 +175,17 @@ gdp-quiz-game/
    pnpm install
    ```
 
-3. **Run the development server**
+3. **Set up Supabase**
+   - Create a new project at [supabase.com](https://supabase.com)
+   - Copy your project URL and anon key
+   - Create a `.env.local` file:
+     ```env
+     NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+     NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+     ```
+   - Run migrations in order (see `migrations/README.md`)
+
+4. **Run the development server**
    ```bash
    npm run dev
    # or
@@ -211,110 +245,27 @@ npm start
    - View answer distributions
    - Flag questions that need review
 
-## Database Schema (Planned for Supabase)
+## Database Schema
 
-The following schema is designed for future Supabase integration:
+The database schema is defined in migration files located in `/migrations`. See `migrations/README.md` for details on applying migrations.
 
 ### Tables
 
-#### `players`
-Stores player aliases and their cumulative scores.
-
-```sql
-create table players (
-  id uuid default uuid_generate_v4() primary key,
-  alias varchar(50) unique not null,
-  total_questions_answered integer default 0,
-  total_correct_answers integer default 0,
-  created_at timestamp with time zone default now(),
-  updated_at timestamp with time zone default now()
-);
-```
-
-#### `questions`
-Stores all submitted questions and their answers.
-
-```sql
-create table questions (
-  id uuid default uuid_generate_v4() primary key,
-  question_text text not null,
-  correct_answer varchar(500) not null,
-  wrong_answer_1 varchar(500) not null,
-  wrong_answer_2 varchar(500) not null,
-  wrong_answer_3 varchar(500) not null,
-  tags text[] default '{}',
-  submitted_by uuid references players(id),
-  flagged boolean default false,
-  flag_reason text,
-  created_at timestamp with time zone default now()
-);
-```
-
-#### `quiz_sessions`
-Stores metadata about each quiz game session.
-
-```sql
-create table quiz_sessions (
-  id uuid default uuid_generate_v4() primary key,
-  lobby_code varchar(10) unique not null,
-  host_player_id uuid references players(id),
-  status varchar(20) default 'waiting' check (status in ('waiting', 'in_progress', 'completed')),
-  current_question_index integer default 0,
-  question_ids uuid[] default '{}',
-  created_at timestamp with time zone default now(),
-  started_at timestamp with time zone,
-  ended_at timestamp with time zone
-);
-```
-
-#### `quiz_participants`
-Tracks which players joined a quiz session.
-
-```sql
-create table quiz_participants (
-  id uuid default uuid_generate_v4() primary key,
-  quiz_session_id uuid references quiz_sessions(id) on delete cascade,
-  player_id uuid references players(id),
-  joined_at timestamp with time zone default now(),
-  unique(quiz_session_id, player_id)
-);
-```
-
-#### `answers`
-Records each player's answer to each question in a session.
-
-```sql
-create table answers (
-  id uuid default uuid_generate_v4() primary key,
-  quiz_session_id uuid references quiz_sessions(id) on delete cascade,
-  question_id uuid references questions(id),
-  player_id uuid references players(id),
-  selected_answer varchar(500) not null,
-  is_correct boolean not null,
-  answered_at timestamp with time zone default now(),
-  unique(quiz_session_id, question_id, player_id)
-);
-```
-
-### Indexes
-
-```sql
-create index idx_questions_tags on questions using gin(tags);
-create index idx_quiz_sessions_lobby_code on quiz_sessions(lobby_code);
-create index idx_quiz_sessions_status on quiz_sessions(status);
-create index idx_answers_session_question on answers(quiz_session_id, question_id);
-```
+- **`players`** - Stores player aliases and cumulative scores
+- **`questions`** - Stores all submitted questions and answers
+- **`quiz_sessions`** - Stores quiz session metadata
+- **`quiz_participants`** - Tracks players in each session
+- **`answers`** - Records player answers to questions
 
 ### Supabase Realtime
 
-Enable realtime subscriptions for:
-- `quiz_sessions` - for status changes and current question updates
-- `quiz_participants` - for lobby participant list
-- `answers` - for tracking who has answered
+After running migrations, enable Realtime subscriptions in Supabase Dashboard:
+- Go to Database > Replication
+- Enable replication for: `quiz_sessions`, `quiz_participants`, `answers`
 
-## Environment Variables (Future)
+## Environment Variables
 
-When integrating Supabase, create a `.env.local` file:
+Create a `.env.local` file in the project root:
 
 ```env
 # Supabase
@@ -387,41 +338,39 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 ## Development Notes
 
-### Current Architecture
+### Architecture
 
-The app uses a singleton `QuizStore` class (`lib/store.ts`) that:
-- Maintains in-memory Maps for all data entities
-- Provides subscription-based reactivity
-- Seeds demo data for testing
-- Mirrors the planned Supabase schema structure
+**Current State**: The app includes both implementations:
+- **Legacy**: In-memory store (`lib/store.ts`) - used for demo mode
+- **New**: Supabase with server actions - ready for integration
 
-### Migration Path to Supabase
+**Supabase Infrastructure**:
+- Client utilities in `lib/supabase/` for browser and server
+- Server actions in `actions/` for all database operations
+- Type-safe database types in `lib/supabase/types.ts`
+- Migration files in `migrations/` for schema management
 
-To migrate to Supabase:
+### Completing the Migration
 
-1. **Install Supabase client**
-   ```bash
-   npm install @supabase/supabase-js
-   ```
+To fully migrate from in-memory store to Supabase:
 
-2. **Create Supabase client utilities**
-   - `lib/supabase/client.ts` - Browser client
-   - `lib/supabase/server.ts` - Server client
+1. **Set up Supabase project**
+   - Create project at supabase.com
+   - Add environment variables to `.env.local`
+   - Run migrations in order (001-005)
 
-3. **Create server actions**
-   - `actions/players.ts` - Player CRUD operations
-   - `actions/questions.ts` - Question operations
-   - `actions/quiz.ts` - Quiz session management
-
-4. **Replace store calls**
-   - Update components to use server actions
+2. **Update components**
+   - Replace `store.*` calls with server actions from `actions/`
    - Add Supabase Realtime subscriptions for live updates
-   - Migrate localStorage to Supabase auth (optional)
+   - Update imports to use Supabase clients
 
-5. **Set up database**
-   - Run SQL schema in Supabase SQL Editor
-   - Enable Realtime for specified tables
-   - Configure Row Level Security (RLS) policies
+3. **Enable Realtime**
+   - Enable replication for `quiz_sessions`, `quiz_participants`, `answers`
+   - Set up Realtime subscriptions in components
+
+4. **Test and remove legacy code**
+   - Test all functionality with Supabase
+   - Remove or deprecate `lib/store.ts` once migration is complete
 
 ### Type Safety
 
@@ -435,10 +384,12 @@ All types are defined in `lib/types.ts`:
 
 ## Future Enhancements
 
-- [ ] **Supabase Integration**
-  - Replace in-memory store with Supabase
-  - Real-time multiplayer across devices
-  - Persistent data storage
+- [x] **Supabase Infrastructure**
+  - ✅ Database schema migrations
+  - ✅ Supabase client utilities
+  - ✅ Server actions for all operations
+  - ⏳ Component migration (in progress)
+  - ⏳ Realtime subscriptions setup
 
 - [ ] **Admin Panel**
   - Review/edit flagged questions

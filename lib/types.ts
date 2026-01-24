@@ -14,7 +14,6 @@ export interface Question {
   wrongAnswer2: string
   wrongAnswer3: string
   tags: string[]
-  submittedBy?: string
   flagged: boolean
   flagReason?: string
   createdAt: Date

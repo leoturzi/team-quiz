@@ -24,10 +24,21 @@ export default function LobbyPage() {
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [availableTags, setAvailableTags] = useState<string[]>([])
 
-  const refreshData = useCallback(() => {
-    const currentSession = store.getSessionByCode(code)
+  const refreshData = useCallback(async () => {
+    // Try cache first
+    let currentSession = store.getSessionByCode(code)
+    
+    // If not in cache, fetch from server
+    if (!currentSession) {
+      currentSession = await store.refreshSessionByCode(code)
+    }
+    
     if (currentSession) {
       setSession(currentSession)
+      setParticipants(store.getParticipants(currentSession.id))
+      
+      // Refresh participants from server
+      await store.refreshParticipants(currentSession.id)
       setParticipants(store.getParticipants(currentSession.id))
 
       // Check if quiz has started
@@ -38,47 +49,60 @@ export default function LobbyPage() {
   }, [code, router])
 
   useEffect(() => {
-    const storedPlayerId = localStorage.getItem('quiz_player_id')
-    const storedAlias = localStorage.getItem('quiz_alias')
+    const loadSession = async () => {
+      const storedPlayerId = localStorage.getItem('quiz_player_id')
+      const storedAlias = localStorage.getItem('quiz_alias')
 
-    if (!storedPlayerId || !storedAlias) {
-      router.push(`/register?redirect=join&code=${code}`)
-      return
-    }
-
-    setPlayerId(storedPlayerId)
-    setPlayerAlias(storedAlias)
-    setAvailableTags(store.getAllTags())
-
-    // Find or join the session
-    const currentSession = store.getSessionByCode(code)
-
-    if (!currentSession) {
-      setError('Quiz session not found. Please check the code and try again.')
-      return
-    }
-
-    if (currentSession.status !== 'waiting') {
-      if (currentSession.status === 'in_progress') {
-        // Check if player is already a participant
-        if (store.isPlayerInSession(currentSession.id, storedPlayerId)) {
-          router.push(`/quiz/${currentSession.id}`)
-          return
-        }
+      if (!storedPlayerId || !storedAlias) {
+        router.push(`/register?redirect=join&code=${code}`)
+        return
       }
-      setError('This quiz has already started or ended.')
-      return
+
+      setPlayerId(storedPlayerId)
+      setPlayerAlias(storedAlias)
+      
+      // Load tags
+      store.getAllTags().then(setAvailableTags).catch(console.error)
+
+      // Find or join the session
+      let currentSession = store.getSessionByCode(code)
+      
+      // If not in cache, fetch from server
+      if (!currentSession) {
+        currentSession = await store.refreshSessionByCode(code)
+      }
+
+      if (!currentSession) {
+        setError('Quiz session not found. Please check the code and try again.')
+        return
+      }
+
+      if (currentSession.status !== 'waiting') {
+        if (currentSession.status === 'in_progress') {
+          // Check if player is already a participant
+          if (store.isPlayerInSession(currentSession.id, storedPlayerId)) {
+            router.push(`/quiz/${currentSession.id}`)
+            return
+          }
+        }
+        setError('This quiz has already started or ended.')
+        return
+      }
+
+      setSession(currentSession)
+      setIsHost(currentSession.hostPlayerId === storedPlayerId)
+
+      // Join session if not already joined
+      if (!store.isPlayerInSession(currentSession.id, storedPlayerId)) {
+        await store.joinSession(currentSession.id, storedPlayerId, storedAlias)
+      }
+
+      // Refresh participants
+      await store.refreshParticipants(currentSession.id)
+      setParticipants(store.getParticipants(currentSession.id))
     }
 
-    setSession(currentSession)
-    setIsHost(currentSession.hostPlayerId === storedPlayerId)
-
-    // Join session if not already joined
-    if (!store.isPlayerInSession(currentSession.id, storedPlayerId)) {
-      store.joinSession(currentSession.id, storedPlayerId, storedAlias)
-    }
-
-    setParticipants(store.getParticipants(currentSession.id))
+    loadSession()
 
     // Subscribe to store updates
     const unsubscribe = store.subscribe(refreshData)
@@ -98,22 +122,28 @@ export default function LobbyPage() {
     )
   }
 
-  const startQuiz = () => {
+  const startQuiz = async () => {
     if (!session || !isHost) return
 
     setIsStarting(true)
 
-    // Get random questions
-    const questions = store.getRandomQuestions(10, selectedTags.length > 0 ? selectedTags : undefined)
+    try {
+      // Get random questions
+      const questions = await store.getRandomQuestions(10, selectedTags.length > 0 ? selectedTags : undefined)
 
-    if (questions.length < 5) {
-      setError('Not enough questions available. Please add more questions or remove tag filters.')
+      if (questions.length < 5) {
+        setError('Not enough questions available. Please add more questions or remove tag filters.')
+        setIsStarting(false)
+        return
+      }
+
+      await store.startSession(session.id, questions.map((q) => q.id))
+      router.push(`/quiz/${session.id}`)
+    } catch (error) {
+      console.error('Failed to start quiz:', error)
+      setError('Failed to start quiz. Please try again.')
       setIsStarting(false)
-      return
     }
-
-    store.startSession(session.id, questions.map((q) => q.id))
-    router.push(`/quiz/${session.id}`)
   }
 
   if (error) {

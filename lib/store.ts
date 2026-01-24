@@ -1,29 +1,328 @@
 'use client'
 
-import type { Player, Question, QuizSession, QuizParticipant, Answer } from './types'
+import type { Player, Question, QuizSession, QuizParticipant, Answer, ScoreboardEntry } from './types'
 import { generateUUID } from './utils'
+import * as playerActions from '@/actions/players'
+import * as questionActions from '@/actions/questions'
+import * as quizActions from '@/actions/quiz'
 
-// In-memory store for demo purposes
-// In production, this would be replaced with Supabase
+// Client-side cache with server action integration
+// Maintains subscription pattern for reactivity while using Supabase backend
 
 class QuizStore {
+  // Client-side cache
   private players: Map<string, Player> = new Map()
   private questions: Map<string, Question> = new Map()
   private sessions: Map<string, QuizSession> = new Map()
   private participants: Map<string, QuizParticipant> = new Map()
   private answers: Map<string, Answer> = new Map()
   private listeners: Set<() => void> = new Set()
-
+  
+  // Demo mode support
   private demoSessionId: string | null = null
+  private isDemoMode: boolean = false
 
   constructor() {
-    // Add some sample questions
-    this.seedQuestions()
+    // Load initial questions from server
+    this.refreshQuestions()
   }
 
-  // Demo mode - seeds all mock data for testing
+  subscribe(listener: () => void) {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+
+  private notify() {
+    this.listeners.forEach((listener) => listener())
+  }
+
+  // ============ Player Methods ============
+
+  async createPlayer(alias: string): Promise<Player> {
+    const player = await playerActions.registerPlayer(alias)
+    this.players.set(player.id, player)
+    this.notify()
+    return player
+  }
+
+  getPlayerByAlias(alias: string): Player | undefined {
+    return Array.from(this.players.values()).find(
+      (p) => p.alias.toLowerCase() === alias.toLowerCase()
+    )
+  }
+
+  getPlayerById(id: string): Player | undefined {
+    return this.players.get(id)
+  }
+
+  async isAliasAvailable(alias: string): Promise<boolean> {
+    // Check cache first
+    if (this.getPlayerByAlias(alias)) {
+      return false
+    }
+    // Check server
+    return await playerActions.checkAliasAvailable(alias)
+  }
+
+  async refreshPlayer(playerId: string): Promise<void> {
+    const player = await playerActions.getPlayerById(playerId)
+    if (player) {
+      this.players.set(player.id, player)
+      this.notify()
+    }
+  }
+
+  updatePlayerStats(playerId: string, correct: boolean) {
+    const player = this.players.get(playerId)
+    if (player) {
+      player.totalQuestionsAnswered++
+      if (correct) {
+        player.totalCorrectAnswers++
+      }
+      this.notify()
+    }
+    // Also update on server (fire and forget)
+    playerActions.updatePlayerStats(playerId, correct).catch(console.error)
+  }
+
+  // ============ Question Methods ============
+
+  async addQuestion(question: Omit<Question, 'id' | 'createdAt' | 'flagged'>): Promise<Question> {
+    const newQuestion = await questionActions.submitQuestion({
+      questionText: question.questionText,
+      correctAnswer: question.correctAnswer,
+      wrongAnswer1: question.wrongAnswer1,
+      wrongAnswer2: question.wrongAnswer2,
+      wrongAnswer3: question.wrongAnswer3,
+      tags: question.tags,
+    })
+    this.questions.set(newQuestion.id, newQuestion)
+    this.notify()
+    return newQuestion
+  }
+
+  getQuestions(): Question[] {
+    return Array.from(this.questions.values())
+  }
+
+  getQuestionById(id: string): Question | undefined {
+    return this.questions.get(id)
+  }
+
+  async refreshQuestion(questionId: string): Promise<void> {
+    const question = await questionActions.getQuestionById(questionId)
+    if (question) {
+      this.questions.set(question.id, question)
+      this.notify()
+    }
+  }
+
+  async refreshQuestions(): Promise<void> {
+    // Load questions from server (for now, we'll load them on demand)
+    // In a real app, you might want pagination or filtering
+    try {
+      // Get a reasonable number of questions
+      const questions = await questionActions.getRandomQuestions(100)
+      questions.forEach((q) => {
+        this.questions.set(q.id, q)
+      })
+      this.notify()
+    } catch (error) {
+      console.error('Failed to refresh questions:', error)
+    }
+  }
+
+  async getRandomQuestions(count: number, tags?: string[]): Promise<Question[]> {
+    const questions = await questionActions.getRandomQuestions(count, tags)
+    // Cache the questions
+    questions.forEach((q) => {
+      this.questions.set(q.id, q)
+    })
+    return questions
+  }
+
+  async getAllTags(): Promise<string[]> {
+    return await questionActions.getAllTags()
+  }
+
+  async flagQuestion(questionId: string, reason?: string): Promise<void> {
+    await questionActions.flagQuestion(questionId, reason)
+    const question = this.questions.get(questionId)
+    if (question) {
+      question.flagged = true
+      question.flagReason = reason
+      this.notify()
+    } else {
+      // Refresh from server if not in cache
+      await this.refreshQuestion(questionId)
+    }
+  }
+
+  // ============ Session Methods ============
+
+  async createSession(hostPlayerId: string): Promise<QuizSession> {
+    const session = await quizActions.createQuizSession(hostPlayerId)
+    this.sessions.set(session.id, session)
+    this.notify()
+    return session
+  }
+
+  getSessionByCode(code: string): QuizSession | undefined {
+    return Array.from(this.sessions.values()).find(
+      (s) => s.lobbyCode === code.toUpperCase()
+    )
+  }
+
+  async refreshSessionByCode(code: string): Promise<QuizSession | null> {
+    const session = await quizActions.getSessionByCode(code)
+    if (session) {
+      this.sessions.set(session.id, session)
+      this.notify()
+    }
+    return session
+  }
+
+  getSessionById(id: string): QuizSession | undefined {
+    return this.sessions.get(id)
+  }
+
+  async refreshSession(id: string): Promise<QuizSession | null> {
+    const session = await quizActions.getSessionById(id)
+    if (session) {
+      this.sessions.set(session.id, session)
+      this.notify()
+    }
+    return session
+  }
+
+  async startSession(sessionId: string, questionIds: string[]): Promise<void> {
+    await quizActions.startQuiz(sessionId, questionIds)
+    const session = this.sessions.get(sessionId)
+    if (session) {
+      session.status = 'in_progress'
+      session.questionIds = questionIds
+      session.startedAt = new Date()
+      session.currentQuestionIndex = 0
+      this.notify()
+    } else {
+      await this.refreshSession(sessionId)
+    }
+  }
+
+  async nextQuestion(sessionId: string): Promise<void> {
+    await quizActions.nextQuestion(sessionId)
+    const session = this.sessions.get(sessionId)
+    if (session) {
+      session.currentQuestionIndex++
+      if (session.currentQuestionIndex >= session.questionIds.length) {
+        session.status = 'completed'
+        session.endedAt = new Date()
+      }
+      this.notify()
+    } else {
+      await this.refreshSession(sessionId)
+    }
+  }
+
+  // ============ Participant Methods ============
+
+  async joinSession(sessionId: string, playerId: string, playerAlias: string): Promise<QuizParticipant> {
+    const participant = await quizActions.joinQuizSession(sessionId, playerId)
+    this.participants.set(participant.id, participant)
+    this.notify()
+    return participant
+  }
+
+  getParticipants(sessionId: string): QuizParticipant[] {
+    return Array.from(this.participants.values()).filter(
+      (p) => p.quizSessionId === sessionId
+    )
+  }
+
+  async refreshParticipants(sessionId: string): Promise<void> {
+    const participants = await quizActions.getParticipants(sessionId)
+    participants.forEach((p) => {
+      this.participants.set(p.id, p)
+    })
+    this.notify()
+  }
+
+  isPlayerInSession(sessionId: string, playerId: string): boolean {
+    return Array.from(this.participants.values()).some(
+      (p) => p.quizSessionId === sessionId && p.playerId === playerId
+    )
+  }
+
+  // ============ Answer Methods ============
+
+  async submitAnswer(
+    sessionId: string,
+    questionId: string,
+    playerId: string,
+    selectedAnswer: string,
+    correctAnswer: string
+  ): Promise<Answer> {
+    const answer = await quizActions.submitAnswer(
+      sessionId,
+      questionId,
+      playerId,
+      selectedAnswer,
+      correctAnswer
+    )
+    this.answers.set(answer.id, answer)
+    this.updatePlayerStats(playerId, answer.isCorrect)
+    this.notify()
+    return answer
+  }
+
+  getAnswersForQuestion(sessionId: string, questionId: string): Answer[] {
+    return Array.from(this.answers.values()).filter(
+      (a) => a.quizSessionId === sessionId && a.questionId === questionId
+    )
+  }
+
+  async refreshAnswersForQuestion(sessionId: string, questionId: string): Promise<void> {
+    const answers = await quizActions.getAnswersForQuestion(sessionId, questionId)
+    answers.forEach((a) => {
+      this.answers.set(a.id, a)
+    })
+    this.notify()
+  }
+
+  getPlayerAnswer(sessionId: string, questionId: string, playerId: string): Answer | undefined {
+    return Array.from(this.answers.values()).find(
+      (a) =>
+        a.quizSessionId === sessionId &&
+        a.questionId === questionId &&
+        a.playerId === playerId
+    )
+  }
+
+  async refreshPlayerAnswer(sessionId: string, questionId: string, playerId: string): Promise<Answer | null> {
+    const answer = await quizActions.getPlayerAnswer(sessionId, questionId, playerId)
+    if (answer) {
+      this.answers.set(answer.id, answer)
+      this.notify()
+    }
+    return answer
+  }
+
+  // ============ Scoreboard Methods ============
+
+  async getScoreboard(): Promise<ScoreboardEntry[]> {
+    return await quizActions.getScoreboard()
+  }
+
+  async getSessionScoreboard(sessionId: string): Promise<ScoreboardEntry[]> {
+    return await quizActions.getSessionScoreboard(sessionId)
+  }
+
+  // ============ Demo Mode Methods ============
+
   seedDemoData(): { playerId: string; playerAlias: string; sessionCode: string } {
-    // Create demo players with stats
+    this.isDemoMode = true
+    
+    // Create demo players with stats (in-memory only for demo)
     const demoPlayers = [
       { alias: 'ByteNinja', correct: 45, total: 50 },
       { alias: 'CodeWizard', correct: 42, total: 50 },
@@ -111,395 +410,28 @@ class QuizStore {
   }
 
   clearDemoData() {
+    if (!this.isDemoMode) return
+    
     this.players.clear()
     this.sessions.clear()
     this.participants.clear()
     this.answers.clear()
-    this.questions.clear()
     this.demoSessionId = null
-    this.seedQuestions()
+    this.isDemoMode = false
+    
     if (typeof window !== 'undefined') {
       localStorage.removeItem('quiz_player_id')
       localStorage.removeItem('quiz_alias')
     }
+    
+    // Reload questions from server
+    this.refreshQuestions()
     this.notify()
   }
 
   private seedQuestions() {
-    const sampleQuestions: Omit<Question, 'id' | 'createdAt'>[] = [
-      {
-        questionText: 'What does the "git rebase" command do?',
-        correctAnswer: 'Reapplies commits on top of another base tip',
-        wrongAnswer1: 'Creates a new branch from the current commit',
-        wrongAnswer2: 'Merges two branches together',
-        wrongAnswer3: 'Deletes the commit history',
-        tags: ['git', 'version-control'],
-        flagged: false,
-      },
-      {
-        questionText: 'In React, what hook is used to perform side effects?',
-        correctAnswer: 'useEffect',
-        wrongAnswer1: 'useState',
-        wrongAnswer2: 'useContext',
-        wrongAnswer3: 'useMemo',
-        tags: ['react', 'javascript'],
-        flagged: false,
-      },
-      {
-        questionText: 'What is the time complexity of binary search?',
-        correctAnswer: 'O(log n)',
-        wrongAnswer1: 'O(n)',
-        wrongAnswer2: 'O(n log n)',
-        wrongAnswer3: 'O(1)',
-        tags: ['algorithms', 'data-structures'],
-        flagged: false,
-      },
-      {
-        questionText: 'Which HTTP status code indicates "Not Found"?',
-        correctAnswer: '404',
-        wrongAnswer1: '500',
-        wrongAnswer2: '401',
-        wrongAnswer3: '200',
-        tags: ['http', 'web'],
-        flagged: false,
-      },
-      {
-        questionText: 'What does CSS stand for?',
-        correctAnswer: 'Cascading Style Sheets',
-        wrongAnswer1: 'Computer Style Sheets',
-        wrongAnswer2: 'Creative Style Syntax',
-        wrongAnswer3: 'Colorful Style Sheets',
-        tags: ['css', 'web'],
-        flagged: false,
-      },
-      {
-        questionText: 'In TypeScript, what keyword is used to define a type alias?',
-        correctAnswer: 'type',
-        wrongAnswer1: 'typedef',
-        wrongAnswer2: 'alias',
-        wrongAnswer3: 'define',
-        tags: ['typescript', 'javascript'],
-        flagged: false,
-      },
-      {
-        questionText: 'What is the purpose of the "async" keyword in JavaScript?',
-        correctAnswer: 'To declare a function that returns a Promise',
-        wrongAnswer1: 'To make synchronous code run faster',
-        wrongAnswer2: 'To pause execution indefinitely',
-        wrongAnswer3: 'To create a new thread',
-        tags: ['javascript', 'async'],
-        flagged: false,
-      },
-      {
-        questionText: 'Which SQL command is used to retrieve data from a database?',
-        correctAnswer: 'SELECT',
-        wrongAnswer1: 'GET',
-        wrongAnswer2: 'FETCH',
-        wrongAnswer3: 'RETRIEVE',
-        tags: ['sql', 'database'],
-        flagged: false,
-      },
-      {
-        questionText: 'What is a "closure" in JavaScript?',
-        correctAnswer: 'A function that has access to variables from its outer scope',
-        wrongAnswer1: 'A way to close a browser window',
-        wrongAnswer2: 'A method to end a loop',
-        wrongAnswer3: 'A type of error handling',
-        tags: ['javascript', 'fundamentals'],
-        flagged: false,
-      },
-      {
-        questionText: 'What does REST stand for in API design?',
-        correctAnswer: 'Representational State Transfer',
-        wrongAnswer1: 'Remote Execution State Transfer',
-        wrongAnswer2: 'Request-Response State Transfer',
-        wrongAnswer3: 'Rapid Execution Service Technology',
-        tags: ['api', 'web'],
-        flagged: false,
-      },
-    ]
-
-    sampleQuestions.forEach((q) => {
-      const id = generateUUID()
-      this.questions.set(id, {
-        ...q,
-        id,
-        createdAt: new Date(),
-      })
-    })
-  }
-
-  subscribe(listener: () => void) {
-    this.listeners.add(listener)
-    return () => this.listeners.delete(listener)
-  }
-
-  private notify() {
-    this.listeners.forEach((listener) => listener())
-  }
-
-  // Player methods
-  createPlayer(alias: string): Player {
-    const id = generateUUID()
-    const player: Player = {
-      id,
-      alias,
-      totalQuestionsAnswered: 0,
-      totalCorrectAnswers: 0,
-      createdAt: new Date(),
-    }
-    this.players.set(id, player)
-    this.notify()
-    return player
-  }
-
-  getPlayerByAlias(alias: string): Player | undefined {
-    return Array.from(this.players.values()).find(
-      (p) => p.alias.toLowerCase() === alias.toLowerCase()
-    )
-  }
-
-  getPlayerById(id: string): Player | undefined {
-    return this.players.get(id)
-  }
-
-  isAliasAvailable(alias: string): boolean {
-    return !this.getPlayerByAlias(alias)
-  }
-
-  updatePlayerStats(playerId: string, correct: boolean) {
-    const player = this.players.get(playerId)
-    if (player) {
-      player.totalQuestionsAnswered++
-      if (correct) {
-        player.totalCorrectAnswers++
-      }
-      this.notify()
-    }
-  }
-
-  // Question methods
-  addQuestion(question: Omit<Question, 'id' | 'createdAt' | 'flagged'>): Question {
-    const id = generateUUID()
-    const newQuestion: Question = {
-      ...question,
-      id,
-      flagged: false,
-      createdAt: new Date(),
-    }
-    this.questions.set(id, newQuestion)
-    this.notify()
-    return newQuestion
-  }
-
-  getQuestions(): Question[] {
-    return Array.from(this.questions.values())
-  }
-
-  getQuestionById(id: string): Question | undefined {
-    return this.questions.get(id)
-  }
-
-  getRandomQuestions(count: number, tags?: string[]): Question[] {
-    let availableQuestions = Array.from(this.questions.values())
-    
-    if (tags && tags.length > 0) {
-      availableQuestions = availableQuestions.filter((q) =>
-        q.tags.some((t) => tags.includes(t))
-      )
-    }
-
-    const shuffled = availableQuestions.sort(() => Math.random() - 0.5)
-    return shuffled.slice(0, Math.min(count, shuffled.length))
-  }
-
-  getAllTags(): string[] {
-    const tags = new Set<string>()
-    this.questions.forEach((q) => q.tags.forEach((t) => tags.add(t)))
-    return Array.from(tags).sort()
-  }
-
-  flagQuestion(questionId: string, reason?: string) {
-    const question = this.questions.get(questionId)
-    if (question) {
-      question.flagged = true
-      question.flagReason = reason
-      this.notify()
-    }
-  }
-
-  // Session methods
-  createSession(hostPlayerId: string): QuizSession {
-    const id = generateUUID()
-    const lobbyCode = this.generateLobbyCode()
-    const session: QuizSession = {
-      id,
-      lobbyCode,
-      hostPlayerId,
-      status: 'waiting',
-      currentQuestionIndex: 0,
-      questionIds: [],
-      createdAt: new Date(),
-    }
-    this.sessions.set(id, session)
-    this.notify()
-    return session
-  }
-
-  private generateLobbyCode(): string {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-    let code = ''
-    for (let i = 0; i < 6; i++) {
-      code += chars[Math.floor(Math.random() * chars.length)]
-    }
-    return code
-  }
-
-  getSessionByCode(code: string): QuizSession | undefined {
-    return Array.from(this.sessions.values()).find(
-      (s) => s.lobbyCode === code.toUpperCase()
-    )
-  }
-
-  getSessionById(id: string): QuizSession | undefined {
-    return this.sessions.get(id)
-  }
-
-  startSession(sessionId: string, questionIds: string[]) {
-    const session = this.sessions.get(sessionId)
-    if (session) {
-      session.status = 'in_progress'
-      session.questionIds = questionIds
-      session.startedAt = new Date()
-      session.currentQuestionIndex = 0
-      this.notify()
-    }
-  }
-
-  nextQuestion(sessionId: string) {
-    const session = this.sessions.get(sessionId)
-    if (session) {
-      session.currentQuestionIndex++
-      if (session.currentQuestionIndex >= session.questionIds.length) {
-        session.status = 'completed'
-        session.endedAt = new Date()
-      }
-      this.notify()
-    }
-  }
-
-  // Participant methods
-  joinSession(sessionId: string, playerId: string, playerAlias: string): QuizParticipant {
-    const id = generateUUID()
-    const participant: QuizParticipant = {
-      id,
-      quizSessionId: sessionId,
-      playerId,
-      playerAlias,
-      joinedAt: new Date(),
-    }
-    this.participants.set(id, participant)
-    this.notify()
-    return participant
-  }
-
-  getParticipants(sessionId: string): QuizParticipant[] {
-    return Array.from(this.participants.values()).filter(
-      (p) => p.quizSessionId === sessionId
-    )
-  }
-
-  isPlayerInSession(sessionId: string, playerId: string): boolean {
-    return Array.from(this.participants.values()).some(
-      (p) => p.quizSessionId === sessionId && p.playerId === playerId
-    )
-  }
-
-  // Answer methods
-  submitAnswer(
-    sessionId: string,
-    questionId: string,
-    playerId: string,
-    selectedAnswer: string,
-    correctAnswer: string
-  ): Answer {
-    const id = generateUUID()
-    const isCorrect = selectedAnswer === correctAnswer
-    const answer: Answer = {
-      id,
-      quizSessionId: sessionId,
-      questionId,
-      playerId,
-      selectedAnswer,
-      isCorrect,
-      answeredAt: new Date(),
-    }
-    this.answers.set(id, answer)
-    this.updatePlayerStats(playerId, isCorrect)
-    this.notify()
-    return answer
-  }
-
-  getAnswersForQuestion(sessionId: string, questionId: string): Answer[] {
-    return Array.from(this.answers.values()).filter(
-      (a) => a.quizSessionId === sessionId && a.questionId === questionId
-    )
-  }
-
-  getPlayerAnswer(sessionId: string, questionId: string, playerId: string): Answer | undefined {
-    return Array.from(this.answers.values()).find(
-      (a) =>
-        a.quizSessionId === sessionId &&
-        a.questionId === questionId &&
-        a.playerId === playerId
-    )
-  }
-
-  // Scoreboard
-  getScoreboard() {
-    const players = Array.from(this.players.values())
-      .filter((p) => p.totalQuestionsAnswered >= 1)
-      .map((p) => ({
-        alias: p.alias,
-        totalQuestionsAnswered: p.totalQuestionsAnswered,
-        totalCorrectAnswers: p.totalCorrectAnswers,
-        accuracy:
-          p.totalQuestionsAnswered > 0
-            ? (p.totalCorrectAnswers / p.totalQuestionsAnswered) * 100
-            : 0,
-      }))
-      .sort((a, b) => b.accuracy - a.accuracy || b.totalCorrectAnswers - a.totalCorrectAnswers)
-      .map((p, i) => ({ ...p, rank: i + 1 }))
-
-    return players
-  }
-
-  getSessionScoreboard(sessionId: string) {
-    const sessionAnswers = Array.from(this.answers.values()).filter(
-      (a) => a.quizSessionId === sessionId
-    )
-    
-    const playerStats = new Map<string, { correct: number; total: number; alias: string }>()
-    
-    sessionAnswers.forEach((answer) => {
-      const player = this.players.get(answer.playerId)
-      if (!player) return
-      
-      const stats = playerStats.get(answer.playerId) || { correct: 0, total: 0, alias: player.alias }
-      stats.total++
-      if (answer.isCorrect) stats.correct++
-      playerStats.set(answer.playerId, stats)
-    })
-
-    return Array.from(playerStats.entries())
-      .map(([, stats]) => ({
-        alias: stats.alias,
-        totalQuestionsAnswered: stats.total,
-        totalCorrectAnswers: stats.correct,
-        accuracy: stats.total > 0 ? (stats.correct / stats.total) * 100 : 0,
-      }))
-      .sort((a, b) => b.totalCorrectAnswers - a.totalCorrectAnswers || b.accuracy - a.accuracy)
-      .map((p, i) => ({ ...p, rank: i + 1 }))
+    // This is now handled by refreshQuestions() which loads from server
+    // Keeping for backward compatibility but it's a no-op
   }
 }
 

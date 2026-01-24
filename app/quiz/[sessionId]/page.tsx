@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { store } from '@/lib/store'
-import type { QuizSession, Question, Answer } from '@/lib/types'
+import type { QuizSession, Question, Answer, ScoreboardEntry } from '@/lib/types'
 import { Flag, ArrowRight, Check, X, Users, Trophy, Clock, Home } from 'lucide-react'
 
 interface ShuffledAnswers {
@@ -45,18 +45,33 @@ export default function QuizPage() {
   const [answers, setAnswers] = useState<Answer[]>([])
   const [participantCount, setParticipantCount] = useState(0)
   const [isFlagged, setIsFlagged] = useState(false)
+  const [sessionScoreboard, setSessionScoreboard] = useState<ScoreboardEntry[]>([])
 
-  const refreshData = useCallback(() => {
-    const currentSession = store.getSessionById(sessionId)
+  const refreshData = useCallback(async () => {
+    // Try cache first, then refresh from server
+    let currentSession = store.getSessionById(sessionId)
+    if (!currentSession) {
+      const refreshed = await store.refreshSession(sessionId)
+      currentSession = refreshed || undefined
+    }
+    
     if (currentSession) {
       setSession(currentSession)
 
       if (currentSession.status === 'completed') {
+        const scoreboard = await store.getSessionScoreboard(sessionId)
+        setSessionScoreboard(scoreboard)
         return
       }
 
       const questionId = currentSession.questionIds[currentSession.currentQuestionIndex]
-      const question = store.getQuestionById(questionId)
+      let question = store.getQuestionById(questionId)
+      
+      // If question not in cache, fetch it
+      if (!question) {
+        await store.refreshQuestion(questionId)
+        question = store.getQuestionById(questionId)
+      }
 
       if (question && (!currentQuestion || currentQuestion.id !== question.id)) {
         setCurrentQuestion(question)
@@ -68,46 +83,75 @@ export default function QuizPage() {
         setIsFlagged(question.flagged)
       }
 
+      // Refresh answers from server
+      await store.refreshAnswersForQuestion(sessionId, questionId)
       setAnswers(store.getAnswersForQuestion(sessionId, questionId))
+      
+      // Refresh participants
+      await store.refreshParticipants(sessionId)
       setParticipantCount(store.getParticipants(sessionId).length)
     }
   }, [sessionId, currentQuestion])
 
   useEffect(() => {
-    const storedPlayerId = localStorage.getItem('quiz_player_id')
-    if (!storedPlayerId) {
-      router.push('/')
-      return
-    }
-    setPlayerId(storedPlayerId)
+    const loadQuiz = async () => {
+      const storedPlayerId = localStorage.getItem('quiz_player_id')
+      if (!storedPlayerId) {
+        router.push('/')
+        return
+      }
+      setPlayerId(storedPlayerId)
 
-    const currentSession = store.getSessionById(sessionId)
-    if (!currentSession) {
-      router.push('/')
-      return
-    }
+      let currentSession = store.getSessionById(sessionId)
+      if (!currentSession) {
+        const refreshed = await store.refreshSession(sessionId)
+        currentSession = refreshed || undefined
+      }
+      
+      if (!currentSession) {
+        router.push('/')
+        return
+      }
 
-    setSession(currentSession)
-    setIsHost(currentSession.hostPlayerId === storedPlayerId)
-    setParticipantCount(store.getParticipants(sessionId).length)
+      setSession(currentSession)
+      setIsHost(currentSession.hostPlayerId === storedPlayerId)
+      
+      // Refresh participants
+      await store.refreshParticipants(sessionId)
+      setParticipantCount(store.getParticipants(sessionId).length)
 
-    const questionId = currentSession.questionIds[currentSession.currentQuestionIndex]
-    const question = store.getQuestionById(questionId)
-    if (question) {
-      setCurrentQuestion(question)
-      setShuffledAnswers(shuffleAnswers(question))
-      setIsFlagged(question.flagged)
+      const questionId = currentSession.questionIds[currentSession.currentQuestionIndex]
+      let question = store.getQuestionById(questionId)
+      
+      // If question not in cache, fetch it
+      if (!question) {
+        await store.refreshQuestion(questionId)
+        question = store.getQuestionById(questionId)
+      }
+      
+      if (question) {
+        setCurrentQuestion(question)
+        setShuffledAnswers(shuffleAnswers(question))
+        setIsFlagged(question.flagged)
 
-      // Check if player has already answered
-      const existingAnswer = store.getPlayerAnswer(sessionId, questionId, storedPlayerId)
-      if (existingAnswer) {
-        setSelectedAnswer(existingAnswer.selectedAnswer)
-        setHasAnswered(true)
+        // Check if player has already answered
+        let existingAnswer = store.getPlayerAnswer(sessionId, questionId, storedPlayerId)
+        if (!existingAnswer) {
+          existingAnswer = await store.refreshPlayerAnswer(sessionId, questionId, storedPlayerId) || undefined
+        }
+        if (existingAnswer) {
+          setSelectedAnswer(existingAnswer.selectedAnswer)
+          setHasAnswered(true)
+        }
       }
     }
 
+    loadQuiz()
+
     const unsubscribe = store.subscribe(refreshData)
-    return () => unsubscribe()
+    return () => {
+      unsubscribe()
+    }
   }, [sessionId, router, refreshData])
 
   // Timer effect
@@ -135,30 +179,46 @@ export default function QuizPage() {
     }
   }, [answers.length, participantCount, showResults])
 
-  const handleSelectAnswer = (answer: string) => {
+  const handleSelectAnswer = async (answer: string) => {
     if (hasAnswered || showResults || !currentQuestion || !playerId) return
 
     setSelectedAnswer(answer)
     setHasAnswered(true)
 
-    store.submitAnswer(
-      sessionId,
-      currentQuestion.id,
-      playerId,
-      answer,
-      currentQuestion.correctAnswer
-    )
+    try {
+      await store.submitAnswer(
+        sessionId,
+        currentQuestion.id,
+        playerId,
+        answer,
+        currentQuestion.correctAnswer
+      )
+      // Refresh answers to show updated distribution
+      await store.refreshAnswersForQuestion(sessionId, currentQuestion.id)
+      setAnswers(store.getAnswersForQuestion(sessionId, currentQuestion.id))
+    } catch (error) {
+      console.error('Failed to submit answer:', error)
+    }
   }
 
-  const handleNextQuestion = () => {
+  const handleNextQuestion = async () => {
     if (!session || !isHost) return
-    store.nextQuestion(sessionId)
+    try {
+      await store.nextQuestion(sessionId)
+      await refreshData()
+    } catch (error) {
+      console.error('Failed to advance question:', error)
+    }
   }
 
-  const handleFlagQuestion = () => {
+  const handleFlagQuestion = async () => {
     if (!currentQuestion) return
-    store.flagQuestion(currentQuestion.id, 'Flagged during quiz')
-    setIsFlagged(true)
+    try {
+      await store.flagQuestion(currentQuestion.id, 'Flagged during quiz')
+      setIsFlagged(true)
+    } catch (error) {
+      console.error('Failed to flag question:', error)
+    }
   }
 
   // Calculate answer distribution
@@ -181,7 +241,6 @@ export default function QuizPage() {
 
   // Quiz completed screen
   if (session.status === 'completed') {
-    const sessionScoreboard = store.getSessionScoreboard(sessionId)
     const playerStats = sessionScoreboard.find((s) => {
       const player = store.getPlayerById(playerId || '')
       return player && s.alias === player.alias

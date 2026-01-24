@@ -28,13 +28,18 @@ export default function SubmitPage() {
   const [existingTags, setExistingTags] = useState<string[]>([])
 
   useEffect(() => {
-    const storedPlayerId = localStorage.getItem('quiz_player_id')
-    if (!storedPlayerId) {
-      router.push('/register?redirect=submit')
-      return
+    const loadData = async () => {
+      const storedPlayerId = localStorage.getItem('quiz_player_id')
+      if (!storedPlayerId) {
+        router.push('/register?redirect=submit')
+        return
+      }
+      setPlayerId(storedPlayerId)
+      const tags = await store.getAllTags()
+      setExistingTags(tags)
     }
-    setPlayerId(storedPlayerId)
-    setExistingTags(store.getAllTags())
+
+    loadData()
   }, [router])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -49,14 +54,13 @@ export default function SubmitPage() {
         .map((t) => t.trim().toLowerCase())
         .filter((t) => t.length > 0)
 
-      store.addQuestion({
+      await store.addQuestion({
         questionText: formData.questionText,
         correctAnswer: formData.correctAnswer,
         wrongAnswer1: formData.wrongAnswer1,
         wrongAnswer2: formData.wrongAnswer2,
         wrongAnswer3: formData.wrongAnswer3,
         tags,
-        submittedBy: playerId,
       })
 
       setSubmitted(true)
@@ -67,7 +71,7 @@ export default function SubmitPage() {
     }
   }
 
-  const handleReset = () => {
+  const handleReset = async () => {
     setFormData({
       questionText: '',
       correctAnswer: '',
@@ -77,7 +81,8 @@ export default function SubmitPage() {
       tags: '',
     })
     setSubmitted(false)
-    setExistingTags(store.getAllTags())
+    const tags = await store.getAllTags()
+    setExistingTags(tags)
   }
 
   const addTag = (tag: string) => {

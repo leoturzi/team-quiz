@@ -13,11 +13,17 @@ export default function ScoreboardPage() {
   const [currentPlayerAlias, setCurrentPlayerAlias] = useState<string | null>(null)
 
   useEffect(() => {
-    setScoreboard(store.getScoreboard())
-    setCurrentPlayerAlias(localStorage.getItem('quiz_alias'))
+    const loadScoreboard = async () => {
+      const scoreboard = await store.getScoreboard()
+      setScoreboard(scoreboard)
+      setCurrentPlayerAlias(localStorage.getItem('quiz_alias'))
+    }
 
-    const unsubscribe = store.subscribe(() => {
-      setScoreboard(store.getScoreboard())
+    loadScoreboard()
+
+    const unsubscribe = store.subscribe(async () => {
+      const scoreboard = await store.getScoreboard()
+      setScoreboard(scoreboard)
     })
 
     return () => unsubscribe()

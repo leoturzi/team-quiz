@@ -24,7 +24,7 @@ export default function HomePage() {
     }
   }, [])
 
-  const handleCreateQuiz = () => {
+  const handleCreateQuiz = async () => {
     if (!alias) {
       router.push('/register?redirect=create')
       return
@@ -37,9 +37,14 @@ export default function HomePage() {
       return
     }
 
-    const session = store.createSession(playerId)
-    store.joinSession(session.id, playerId, alias)
-    router.push(`/lobby/${session.lobbyCode}`)
+    try {
+      const session = await store.createSession(playerId)
+      await store.joinSession(session.id, playerId, alias)
+      router.push(`/lobby/${session.lobbyCode}`)
+    } catch (error) {
+      console.error('Failed to create quiz:', error)
+      setIsCreating(false)
+    }
   }
 
   const handleJoinQuiz = () => {
@@ -209,7 +214,7 @@ export default function HomePage() {
           <div className="inline-flex flex-wrap justify-center gap-6 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-primary" />
-              <span>{store.getQuestions().length} Questions in Pool</span>
+              <span>{store.getQuestions().length} Questions Loaded</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-accent" />
