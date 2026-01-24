@@ -141,6 +141,17 @@ export async function joinQuizSession(
 ): Promise<QuizParticipant> {
   const supabase = await createClient()
 
+  // First, verify the player exists in the database
+  const { data: playerData, error: playerError } = await supabase
+    .from('players')
+    .select('alias')
+    .eq('id', playerId)
+    .single()
+
+  if (playerError || !playerData) {
+    throw new Error('Player not found. Please register again.')
+  }
+
   // Check if already joined
   const { data: existing } = await supabase
     .from('quiz_participants')
@@ -150,18 +161,11 @@ export async function joinQuizSession(
     .single()
 
   if (existing) {
-    // Get player alias
-    const { data: player } = await supabase
-      .from('players')
-      .select('alias')
-      .eq('id', playerId)
-      .single()
-
     return {
       id: existing.id,
       quizSessionId: existing.quiz_session_id,
       playerId: existing.player_id,
-      playerAlias: player?.alias || '',
+      playerAlias: playerData.alias || '',
       joinedAt: new Date(existing.joined_at),
     }
   }

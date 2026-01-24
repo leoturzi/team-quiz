@@ -9,6 +9,8 @@ import { store } from '@/lib/store'
 import type { QuizSession, QuizParticipant } from '@/lib/types'
 import { ArrowLeft, Copy, Check, Users, Play, Loader2, Tag, X } from 'lucide-react'
 
+const QUESTIONS_PER_QUIZ = 1
+const MIN_QUESTIONS_PER_QUIZ = 1
 export default function LobbyPage() {
   const params = useParams()
   const code = params.code as string
@@ -24,21 +26,11 @@ export default function LobbyPage() {
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [availableTags, setAvailableTags] = useState<string[]>([])
 
-  const refreshData = useCallback(async () => {
-    // Try cache first
-    let currentSession = store.getSessionByCode(code)
-    
-    // If not in cache, fetch from server
-    if (!currentSession) {
-      currentSession = await store.refreshSessionByCode(code)
-    }
-    
+  // Update UI from store cache (realtime updates the cache automatically)
+  const updateFromStore = useCallback(() => {
+    const currentSession = store.getSessionByCode(code)
     if (currentSession) {
       setSession(currentSession)
-      setParticipants(store.getParticipants(currentSession.id))
-      
-      // Refresh participants from server
-      await store.refreshParticipants(currentSession.id)
       setParticipants(store.getParticipants(currentSession.id))
 
       // Check if quiz has started
@@ -49,6 +41,10 @@ export default function LobbyPage() {
   }, [code, router])
 
   useEffect(() => {
+    let unsubscribeRealtime: (() => void) | null = null
+    let unsubscribeStore: (() => void) | null = null
+    let isMounted = true
+
     const loadSession = async () => {
       const storedPlayerId = localStorage.getItem('quiz_player_id')
       const storedAlias = localStorage.getItem('quiz_alias')
@@ -69,8 +65,11 @@ export default function LobbyPage() {
       
       // If not in cache, fetch from server
       if (!currentSession) {
-        currentSession = await store.refreshSessionByCode(code)
+        const refreshed = await store.refreshSessionByCode(code)
+        currentSession = refreshed || undefined
       }
+
+      if (!isMounted) return
 
       if (!currentSession) {
         setError('Quiz session not found. Please check the code and try again.')
@@ -94,21 +93,43 @@ export default function LobbyPage() {
 
       // Join session if not already joined
       if (!store.isPlayerInSession(currentSession.id, storedPlayerId)) {
-        await store.joinSession(currentSession.id, storedPlayerId, storedAlias)
+        try {
+          await store.joinSession(currentSession.id, storedPlayerId, storedAlias)
+        } catch (error: any) {
+          // If player doesn't exist, redirect to registration
+          if (error?.message?.includes('Player not found')) {
+            localStorage.removeItem('quiz_player_id')
+            localStorage.removeItem('quiz_alias')
+            router.push(`/register?redirect=join&code=${code}`)
+            return
+          }
+          throw error
+        }
       }
 
-      // Refresh participants
+      if (!isMounted) return
+
+      // Initial load of participants from server
       await store.refreshParticipants(currentSession.id)
       setParticipants(store.getParticipants(currentSession.id))
+      
+      // Subscribe to realtime updates for this session
+      // Realtime will update the store cache, then we update UI
+      unsubscribeRealtime = store.subscribeToSession(currentSession.id)
+      
+      // Subscribe to store updates to sync UI when cache changes
+      unsubscribeStore = store.subscribe(updateFromStore)
     }
 
     loadSession()
 
-    // Subscribe to store updates
-    const unsubscribe = store.subscribe(refreshData)
-
-    return () => unsubscribe()
-  }, [code, router, refreshData])
+    // Cleanup function runs synchronously when component unmounts
+    return () => {
+      isMounted = false
+      unsubscribeRealtime?.()
+      unsubscribeStore?.()
+    }
+  }, [code, router, updateFromStore])
 
   const copyCode = async () => {
     await navigator.clipboard.writeText(code)
@@ -129,9 +150,9 @@ export default function LobbyPage() {
 
     try {
       // Get random questions
-      const questions = await store.getRandomQuestions(10, selectedTags.length > 0 ? selectedTags : undefined)
+      const questions = await store.getRandomQuestions(QUESTIONS_PER_QUIZ, selectedTags.length > 0 ? selectedTags : undefined)
 
-      if (questions.length < 5) {
+      if (questions.length < MIN_QUESTIONS_PER_QUIZ) {
         setError('Not enough questions available. Please add more questions or remove tag filters.')
         setIsStarting(false)
         return

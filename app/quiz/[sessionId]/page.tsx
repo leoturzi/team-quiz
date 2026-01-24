@@ -47,59 +47,47 @@ export default function QuizPage() {
   const [isFlagged, setIsFlagged] = useState(false)
   const [sessionScoreboard, setSessionScoreboard] = useState<ScoreboardEntry[]>([])
 
-  const refreshData = useCallback(async () => {
-    // Try cache first, then refresh from server
-    let currentSession = store.getSessionById(sessionId)
-    if (!currentSession) {
-      const refreshed = await store.refreshSession(sessionId)
-      currentSession = refreshed || undefined
+  // Update UI from store cache (realtime updates the cache automatically)
+  const updateFromStore = useCallback(() => {
+    const currentSession = store.getSessionById(sessionId)
+    if (!currentSession) return
+
+    setSession(currentSession)
+
+    if (currentSession.status === 'completed') {
+      // Load scoreboard only when completed
+      store.getSessionScoreboard(sessionId).then(setSessionScoreboard).catch(console.error)
+      return
     }
-    
-    if (currentSession) {
-      setSession(currentSession)
 
-      if (currentSession.status === 'completed') {
-        const scoreboard = await store.getSessionScoreboard(sessionId)
-        setSessionScoreboard(scoreboard)
-        return
-      }
+    const questionId = currentSession.questionIds[currentSession.currentQuestionIndex]
+    const question = store.getQuestionById(questionId)
 
-      const questionId = currentSession.questionIds[currentSession.currentQuestionIndex]
-      let question = store.getQuestionById(questionId)
-      
-      // If question not in cache, fetch it
-      if (!question) {
-        await store.refreshQuestion(questionId)
-        question = store.getQuestionById(questionId)
-      }
-
-      if (question && (!currentQuestion || currentQuestion.id !== question.id)) {
-        setCurrentQuestion(question)
-        setShuffledAnswers(shuffleAnswers(question))
-        setSelectedAnswer(null)
-        setHasAnswered(false)
-        setShowResults(false)
-        setTimeLeft(60)
-        setIsFlagged(question.flagged)
-      }
-
-      // Refresh answers from server
-      await store.refreshAnswersForQuestion(sessionId, questionId)
-      setAnswers(store.getAnswersForQuestion(sessionId, questionId))
-      
-      // Refresh participants
-      await store.refreshParticipants(sessionId)
-      setParticipantCount(store.getParticipants(sessionId).length)
+    if (question && (!currentQuestion || currentQuestion.id !== question.id)) {
+      setCurrentQuestion(question)
+      setShuffledAnswers(shuffleAnswers(question))
+      setSelectedAnswer(null)
+      setHasAnswered(false)
+      setShowResults(false)
+      setTimeLeft(60)
+      setIsFlagged(question.flagged)
     }
+
+    // Update from cache (realtime handles updates)
+    setAnswers(store.getAnswersForQuestion(sessionId, questionId))
+    setParticipantCount(store.getParticipants(sessionId).length)
   }, [sessionId, currentQuestion])
 
   useEffect(() => {
+    let isMounted = true
+
     const loadQuiz = async () => {
       const storedPlayerId = localStorage.getItem('quiz_player_id')
       if (!storedPlayerId) {
         router.push('/')
         return
       }
+      if (!isMounted) return
       setPlayerId(storedPlayerId)
 
       let currentSession = store.getSessionById(sessionId)
@@ -108,6 +96,8 @@ export default function QuizPage() {
         currentSession = refreshed || undefined
       }
       
+      if (!isMounted) return
+
       if (!currentSession) {
         router.push('/')
         return
@@ -118,6 +108,7 @@ export default function QuizPage() {
       
       // Refresh participants
       await store.refreshParticipants(sessionId)
+      if (!isMounted) return
       setParticipantCount(store.getParticipants(sessionId).length)
 
       const questionId = currentSession.questionIds[currentSession.currentQuestionIndex]
@@ -129,6 +120,8 @@ export default function QuizPage() {
         question = store.getQuestionById(questionId)
       }
       
+      if (!isMounted) return
+
       if (question) {
         setCurrentQuestion(question)
         setShuffledAnswers(shuffleAnswers(question))
@@ -139,6 +132,7 @@ export default function QuizPage() {
         if (!existingAnswer) {
           existingAnswer = await store.refreshPlayerAnswer(sessionId, questionId, storedPlayerId) || undefined
         }
+        if (!isMounted) return
         if (existingAnswer) {
           setSelectedAnswer(existingAnswer.selectedAnswer)
           setHasAnswered(true)
@@ -148,11 +142,19 @@ export default function QuizPage() {
 
     loadQuiz()
 
-    const unsubscribe = store.subscribe(refreshData)
+    // Subscribe to realtime updates for this session
+    // Realtime will update the store cache, then we update UI
+    const unsubscribeRealtime = store.subscribeToSession(sessionId)
+    
+    // Subscribe to store updates to sync UI when cache changes
+    const unsubscribeStore = store.subscribe(updateFromStore)
+
     return () => {
-      unsubscribe()
+      isMounted = false
+      unsubscribeRealtime()
+      unsubscribeStore()
     }
-  }, [sessionId, router, refreshData])
+  }, [sessionId, router, updateFromStore])
 
   // Timer effect
   useEffect(() => {
@@ -205,7 +207,9 @@ export default function QuizPage() {
     if (!session || !isHost) return
     try {
       await store.nextQuestion(sessionId)
-      await refreshData()
+      // Realtime will update the store, then updateFromStore will sync UI
+      // But we can manually trigger it to ensure immediate update
+      updateFromStore()
     } catch (error) {
       console.error('Failed to advance question:', error)
     }

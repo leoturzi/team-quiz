@@ -5,6 +5,8 @@ import { generateUUID } from './utils'
 import * as playerActions from '@/actions/players'
 import * as questionActions from '@/actions/questions'
 import * as quizActions from '@/actions/quiz'
+import { createClient } from './supabase/client'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 
 // Client-side cache with server action integration
 // Maintains subscription pattern for reactivity while using Supabase backend
@@ -22,9 +24,13 @@ class QuizStore {
   private demoSessionId: string | null = null
   private isDemoMode: boolean = false
 
+  // Realtime subscriptions
+  private supabase = createClient()
+  private activeChannels: Map<string, RealtimeChannel> = new Map()
+
   constructor() {
-    // Load initial questions from server
-    this.refreshQuestions()
+    // Questions will be loaded on-demand when needed
+    // Don't load here to avoid calling server actions during module initialization
   }
 
   subscribe(listener: () => void) {
@@ -424,14 +430,165 @@ class QuizStore {
       localStorage.removeItem('quiz_alias')
     }
     
-    // Reload questions from server
-    this.refreshQuestions()
+    // Questions will be loaded on-demand when needed
     this.notify()
   }
 
   private seedQuestions() {
     // This is now handled by refreshQuestions() which loads from server
     // Keeping for backward compatibility but it's a no-op
+  }
+
+  // ============ Realtime Subscription Methods ============
+
+  /**
+   * Subscribe to realtime updates for a quiz session
+   * This will listen for changes to:
+   * - quiz_sessions (status, current_question_index)
+   * - quiz_participants (new joins)
+   * - answers (new submissions)
+   */
+  subscribeToSession(sessionId: string): () => void {
+    // Don't subscribe if already subscribed
+    if (this.activeChannels.has(sessionId)) {
+      return () => this.unsubscribeFromSession(sessionId)
+    }
+
+    const channel = this.supabase
+      .channel(`quiz-session-${sessionId}`)
+      .on('system', {}, (payload) => {
+        console.log('[Realtime] System event:', payload)
+      })
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'quiz_sessions',
+        },
+        async (payload) => {
+          console.log('[Realtime] quiz_sessions change received:', payload)
+          // Filter in callback instead of in subscription
+          const data = payload.new as any
+          if (!data || data.id !== sessionId) return
+          
+          if (payload.eventType === 'UPDATE') {
+            const sessionData = data
+            console.log('[Realtime] Session update data:', sessionData)
+            const session: QuizSession = {
+              id: sessionData.id,
+              lobbyCode: sessionData.lobby_code,
+              hostPlayerId: sessionData.host_player_id || '',
+              status: sessionData.status,
+              currentQuestionIndex: sessionData.current_question_index,
+              questionIds: sessionData.question_ids || [],
+              createdAt: new Date(sessionData.created_at),
+              startedAt: sessionData.started_at ? new Date(sessionData.started_at) : undefined,
+              endedAt: sessionData.ended_at ? new Date(sessionData.ended_at) : undefined,
+            }
+            this.sessions.set(session.id, session)
+            console.log('[Realtime] Updated session in store, notifying listeners')
+            this.notify()
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'quiz_participants',
+        },
+        async (payload) => {
+          console.log('[Realtime] quiz_participants change received:', payload)
+          // Filter in callback instead of in subscription
+          const data = payload.new as any
+          if (!data || data.quiz_session_id !== sessionId) return
+          
+          if (payload.eventType === 'INSERT') {
+            const participantData = data
+            console.log('[Realtime] New participant data:', participantData)
+            // Fetch player alias
+            const player = await playerActions.getPlayerById(participantData.player_id)
+            console.log('[Realtime] Fetched player:', player)
+            const participant: QuizParticipant = {
+              id: participantData.id,
+              quizSessionId: participantData.quiz_session_id,
+              playerId: participantData.player_id,
+              playerAlias: player?.alias || 'Unknown',
+              joinedAt: new Date(participantData.joined_at),
+            }
+            this.participants.set(participant.id, participant)
+            console.log('[Realtime] Added participant to store, notifying listeners')
+            this.notify()
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'answers',
+        },
+        async (payload) => {
+          // Filter in callback instead of in subscription
+          const data = payload.new as any
+          if (!data || data.quiz_session_id !== sessionId) return
+          
+          if (payload.eventType === 'INSERT') {
+            const answerData = data
+            const answer: Answer = {
+              id: answerData.id,
+              quizSessionId: answerData.quiz_session_id,
+              questionId: answerData.question_id,
+              playerId: answerData.player_id,
+              selectedAnswer: answerData.selected_answer,
+              isCorrect: answerData.is_correct,
+              answeredAt: new Date(answerData.answered_at),
+            }
+            this.answers.set(answer.id, answer)
+            this.notify()
+          }
+        }
+      )
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log(`[Realtime] Subscribed to session ${sessionId}`)
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error(`[Realtime] Channel error for session ${sessionId}:`, err)
+        } else if (status === 'TIMED_OUT') {
+          console.error(`[Realtime] Subscription timed out for session ${sessionId}`)
+        } else if (status === 'CLOSED') {
+          console.log(`[Realtime] Channel closed for session ${sessionId}`)
+        }
+      })
+
+    this.activeChannels.set(sessionId, channel)
+
+    // Return cleanup function
+    return () => this.unsubscribeFromSession(sessionId)
+  }
+
+  /**
+   * Unsubscribe from realtime updates for a quiz session
+   */
+  unsubscribeFromSession(sessionId: string): void {
+    const channel = this.activeChannels.get(sessionId)
+    if (channel) {
+      this.supabase.removeChannel(channel)
+      this.activeChannels.delete(sessionId)
+    }
+  }
+
+  /**
+   * Unsubscribe from all active realtime channels
+   */
+  unsubscribeAll(): void {
+    this.activeChannels.forEach((channel, sessionId) => {
+      this.supabase.removeChannel(channel)
+    })
+    this.activeChannels.clear()
   }
 }
 
