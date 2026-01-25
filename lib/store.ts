@@ -226,6 +226,27 @@ class QuizStore {
     }
   }
 
+  async cancelSession(sessionId: string): Promise<void> {
+    await quizActions.cancelQuizSession(sessionId)
+    // Remove from cache
+    this.sessions.delete(sessionId)
+    // Remove all participants for this session
+    Array.from(this.participants.entries()).forEach(([id, participant]) => {
+      if (participant.quizSessionId === sessionId) {
+        this.participants.delete(id)
+      }
+    })
+    // Remove all answers for this session
+    Array.from(this.answers.entries()).forEach(([id, answer]) => {
+      if (answer.quizSessionId === sessionId) {
+        this.answers.delete(id)
+      }
+    })
+    // Unsubscribe from realtime
+    this.unsubscribeFromSession(sessionId)
+    this.notify()
+  }
+
   // ============ Participant Methods ============
 
   async joinSession(sessionId: string, playerId: string, playerAlias: string): Promise<QuizParticipant> {
@@ -349,11 +370,34 @@ class QuizStore {
           table: 'quiz_sessions',
         },
         async (payload) => {
-          // Filter in callback since subscription filters require specific RLS setup
-          const data = payload.new as any
-          if (!data || data.id !== sessionId) return
+          // Handle DELETE events (session was cancelled)
+          if (payload.eventType === 'DELETE') {
+            const oldData = payload.old as any
+            if (oldData && oldData.id === sessionId) {
+              // Remove session from cache
+              this.sessions.delete(sessionId)
+              // Remove all participants for this session
+              Array.from(this.participants.entries()).forEach(([id, participant]) => {
+                if (participant.quizSessionId === sessionId) {
+                  this.participants.delete(id)
+                }
+              })
+              // Remove all answers for this session
+              Array.from(this.answers.entries()).forEach(([id, answer]) => {
+                if (answer.quizSessionId === sessionId) {
+                  this.answers.delete(id)
+                }
+              })
+              this.notify()
+            }
+            return
+          }
           
+          // Handle UPDATE events
           if (payload.eventType === 'UPDATE') {
+            const data = payload.new as any
+            if (!data || data.id !== sessionId) return
+            
             const sessionData = data
             const session: QuizSession = {
               id: sessionData.id,

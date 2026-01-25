@@ -6,9 +6,17 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Slider } from '@/components/ui/slider'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { store } from '@/lib/store'
 import type { QuizSession, QuizParticipant } from '@/lib/types'
-import { ArrowLeft, Copy, Check, Users, Play, Loader2, Tag, X, HelpCircle } from 'lucide-react'
+import { ArrowLeft, Copy, Check, Users, Play, Loader2, Tag, X, HelpCircle, XCircle } from 'lucide-react'
 
 const MIN_QUESTIONS = 5
 const MAX_QUESTIONS = 30
@@ -28,6 +36,8 @@ export default function LobbyPage() {
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [availableTags, setAvailableTags] = useState<string[]>([])
   const [questionCount, setQuestionCount] = useState(DEFAULT_QUESTIONS)
+  const [showCancelDialog, setShowCancelDialog] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
 
   // Update UI from store cache (realtime updates the cache automatically)
   const updateFromStore = useCallback(() => {
@@ -40,6 +50,11 @@ export default function LobbyPage() {
       if (currentSession.status === 'in_progress') {
         router.push(`/quiz/${currentSession.id}`)
       }
+    } else {
+      // Session was deleted (cancelled by host)
+      setSession(null)
+      setParticipants([])
+      router.push('/')
     }
   }, [code, router])
 
@@ -167,6 +182,19 @@ export default function LobbyPage() {
       console.error('Failed to start quiz:', error)
       setError('Failed to start quiz. Please try again.')
       setIsStarting(false)
+    }
+  }
+
+  const handleCancelQuiz = async () => {
+    if (!session || !isHost) return
+    setIsCancelling(true)
+    try {
+      await store.cancelSession(session.id)
+      router.push('/')
+    } catch (error) {
+      console.error('Failed to cancel quiz:', error)
+      setError('Failed to cancel quiz. Please try again.')
+      setIsCancelling(false)
     }
   }
 
@@ -333,24 +361,35 @@ export default function LobbyPage() {
                 )}
               </div>
 
-              <Button
-                onClick={startQuiz}
-                disabled={participants.length < 1 || isStarting}
-                className="w-full"
-                size="lg"
-              >
-                {isStarting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Starting...
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-4 h-4" />
-                    Start Quiz
-                  </>
-                )}
-              </Button>
+              <div className="space-y-3">
+                <Button
+                  onClick={startQuiz}
+                  disabled={participants.length < 1 || isStarting}
+                  className="w-full"
+                  size="lg"
+                >
+                  {isStarting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Starting...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4" />
+                      Start Quiz
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowCancelDialog(true)}
+                  disabled={isStarting || isCancelling}
+                  className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
+                >
+                  <XCircle className="w-4 h-4" />
+                  Cancel Session
+                </Button>
+              </div>
               {participants.length < 1 && (
                 <p className="text-sm text-center text-muted-foreground">
                   Waiting for at least 1 participant to join
@@ -369,6 +408,36 @@ export default function LobbyPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Cancel Session Dialog */}
+        <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Cancel Quiz Session?</DialogTitle>
+              <DialogDescription>
+                {session?.status === 'waiting' 
+                  ? 'This will cancel the quiz session. All participants will be removed and the session will be deleted. This action cannot be undone.'
+                  : 'This will cancel the current quiz session and rollback all player statistics. All answers submitted during this session will be removed, and player stats will be reverted to their previous values. This action cannot be undone.'}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setShowCancelDialog(false)}
+                disabled={isCancelling}
+              >
+                Keep Session
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleCancelQuiz}
+                disabled={isCancelling}
+              >
+                {isCancelling ? 'Cancelling...' : 'Yes, Cancel Session'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </main>
   )

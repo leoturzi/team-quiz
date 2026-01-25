@@ -503,3 +503,70 @@ export async function getSessionScoreboard(
     .sort((a, b) => b.totalCorrectAnswers - a.totalCorrectAnswers || b.accuracy - a.accuracy)
     .map((p, i) => ({ ...p, rank: i + 1 }))
 }
+
+/**
+ * Cancel a quiz session and rollback all player stats
+ * Works for both waiting sessions (no answers) and in-progress sessions (with answers)
+ */
+export async function cancelQuizSession(sessionId: string): Promise<void> {
+  const supabase = await createClient()
+
+  // 1. Get all answers for this session (may be empty if cancelled before quiz starts)
+  const { data: answers, error: answersError } = await supabase
+    .from('answers')
+    .select('player_id, is_correct')
+    .eq('quiz_session_id', sessionId)
+
+  if (answersError) {
+    throw new Error(`Failed to fetch answers: ${answersError.message}`)
+  }
+
+  // 2. Group answers by player and calculate rollback amounts
+  // If no answers exist (session cancelled before starting), this will be empty
+  const playerRollbacks = new Map<string, { total: number; correct: number }>()
+  
+  answers?.forEach((answer) => {
+    const current = playerRollbacks.get(answer.player_id) || { total: 0, correct: 0 }
+    current.total++
+    if (answer.is_correct) {
+      current.correct++
+    }
+    playerRollbacks.set(answer.player_id, current)
+  })
+
+  // 3. Rollback each player's stats (only if there are answers to rollback)
+  for (const [playerId, rollback] of playerRollbacks.entries()) {
+    const { data: player } = await supabase
+      .from('players')
+      .select('total_questions_answered, total_correct_answers')
+      .eq('id', playerId)
+      .single()
+
+    if (player) {
+      const { error: updateError } = await supabase
+        .from('players')
+        .update({
+          total_questions_answered: Math.max(0, (player.total_questions_answered || 0) - rollback.total),
+          total_correct_answers: Math.max(0, (player.total_correct_answers || 0) - rollback.correct),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', playerId)
+
+      if (updateError) {
+        console.error(`Failed to rollback stats for player ${playerId}:`, updateError)
+        // Continue with other players even if one fails
+      }
+    }
+  }
+
+  // 4. Delete the session (cascades to answers and participants)
+  // This always happens, regardless of whether there were answers
+  const { error: deleteError } = await supabase
+    .from('quiz_sessions')
+    .delete()
+    .eq('id', sessionId)
+
+  if (deleteError) {
+    throw new Error(`Failed to cancel session: ${deleteError.message}`)
+  }
+}

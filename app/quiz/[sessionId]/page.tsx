@@ -6,9 +6,17 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { store } from '@/lib/store'
 import type { QuizSession, Question, Answer, ScoreboardEntry } from '@/lib/types'
-import { Flag, ArrowRight, Check, X, Users, Trophy, Clock, Home } from 'lucide-react'
+import { Flag, ArrowRight, Check, X, Users, Trophy, Clock, Home, XCircle } from 'lucide-react'
 
 interface ShuffledAnswers {
   answers: string[]
@@ -46,6 +54,8 @@ export default function QuizPage() {
   const [participantCount, setParticipantCount] = useState(0)
   const [isFlagged, setIsFlagged] = useState(false)
   const [sessionScoreboard, setSessionScoreboard] = useState<ScoreboardEntry[]>([])
+  const [showCancelDialog, setShowCancelDialog] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
 
   // Use a ref to track displayed question index to avoid callback recreation
   const displayedQuestionIndexRef = useRef<number>(-1)
@@ -53,7 +63,11 @@ export default function QuizPage() {
   // Update UI from store cache (realtime updates the cache automatically)
   const updateFromStore = useCallback(async () => {
     const currentSession = store.getSessionById(sessionId)
-    if (!currentSession) return
+    if (!currentSession) {
+      // Session was deleted (cancelled by host)
+      router.push('/')
+      return
+    }
 
     setSession(currentSession)
 
@@ -93,7 +107,7 @@ export default function QuizPage() {
       setAnswers(store.getAnswersForQuestion(sessionId, questionId))
     }
     setParticipantCount(store.getParticipants(sessionId).length)
-  }, [sessionId])
+  }, [sessionId, router])
 
   useEffect(() => {
     let isMounted = true
@@ -248,6 +262,18 @@ export default function QuizPage() {
     }
   }
 
+  const handleCancelQuiz = async () => {
+    if (!session || !isHost) return
+    setIsCancelling(true)
+    try {
+      await store.cancelSession(sessionId)
+      router.push('/')
+    } catch (error) {
+      console.error('Failed to cancel quiz:', error)
+      setIsCancelling(false)
+    }
+  }
+
   // Calculate answer distribution
   const answerDistribution = useMemo(() => {
     if (!shuffledAnswers) return []
@@ -383,6 +409,17 @@ export default function QuizPage() {
               <Clock className="w-4 h-4" />
               {timeLeft}s
             </div>
+            {isHost && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowCancelDialog(true)}
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              >
+                <XCircle className="w-4 h-4" />
+                Cancel Quiz
+              </Button>
+            )}
           </div>
         </div>
 
@@ -511,6 +548,36 @@ export default function QuizPage() {
             )}
           </div>
         )}
+
+        {/* Cancel Quiz Dialog */}
+        <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Cancel Quiz Session?</DialogTitle>
+              <DialogDescription>
+                This will cancel the current quiz session and rollback all player statistics. 
+                All answers submitted during this session will be removed, and player stats 
+                will be reverted to their previous values. This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setShowCancelDialog(false)}
+                disabled={isCancelling}
+              >
+                Keep Quiz
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleCancelQuiz}
+                disabled={isCancelling}
+              >
+                {isCancelling ? 'Cancelling...' : 'Yes, Cancel Quiz'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </main>
   )
