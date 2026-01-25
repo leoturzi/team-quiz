@@ -164,3 +164,22 @@ export async function flagQuestion(
     throw new Error(`Failed to flag question: ${error.message}`)
   }
 }
+
+/**
+ * Get the total count of available (non-flagged) questions
+ */
+export async function getQuestionCount(): Promise<number> {
+  const supabase = await createClient()
+
+  const { count, error } = await supabase
+    .from('questions')
+    .select('*', { count: 'exact', head: true })
+    .eq('flagged', false)
+
+  if (error) {
+    console.error('Error fetching question count:', error)
+    return 0
+  }
+
+  return count || 0
+}

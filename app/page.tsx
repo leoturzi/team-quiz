@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { store } from '@/lib/store'
+import { getQuestionCount } from '@/actions/questions'
 import { Users, PlusCircle, Trophy, Play, Zap, Sparkles } from 'lucide-react'
 
 export default function HomePage() {
@@ -15,6 +16,7 @@ export default function HomePage() {
   const [lobbyCode, setLobbyCode] = useState('')
   const [isCreating, setIsCreating] = useState(false)
   const [isLoadingDemo, setIsLoadingDemo] = useState(false)
+  const [questionCount, setQuestionCount] = useState<number>(0)
 
   useEffect(() => {
     const storedAlias = localStorage.getItem('quiz_alias')
@@ -22,6 +24,9 @@ export default function HomePage() {
     if (storedAlias && storedPlayerId) {
       setAlias(storedAlias)
     }
+    
+    // Fetch question count from server
+    getQuestionCount().then(setQuestionCount)
   }, [])
 
   const handleCreateQuiz = async () => {
@@ -214,7 +219,7 @@ export default function HomePage() {
           <div className="inline-flex flex-wrap justify-center gap-6 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-primary" />
-              <span>{store.getQuestions().length} Questions Loaded</span>
+              <span>Pool of questions: {questionCount}</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-accent" />
