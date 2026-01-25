@@ -8,14 +8,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { store } from '@/lib/store'
 import { getQuestionCount } from '@/actions/questions'
-import { Users, PlusCircle, Trophy, Play, Zap, Sparkles } from 'lucide-react'
+import { Users, PlusCircle, Trophy, Play, Zap } from 'lucide-react'
 
 export default function HomePage() {
   const router = useRouter()
   const [alias, setAlias] = useState<string | null>(null)
   const [lobbyCode, setLobbyCode] = useState('')
   const [isCreating, setIsCreating] = useState(false)
-  const [isLoadingDemo, setIsLoadingDemo] = useState(false)
   const [questionCount, setQuestionCount] = useState<number>(0)
 
   useEffect(() => {
@@ -62,16 +61,6 @@ export default function HomePage() {
     router.push(`/lobby/${lobbyCode.toUpperCase()}`)
   }
 
-  const handleTryDemo = () => {
-    setIsLoadingDemo(true)
-    const { playerAlias, sessionCode } = store.seedDemoData()
-    setAlias(playerAlias)
-    // Short delay for visual feedback
-    setTimeout(() => {
-      router.push(`/lobby/${sessionCode}`)
-    }, 500)
-  }
-
   return (
     <main className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-12 max-w-4xl">
@@ -93,31 +82,6 @@ export default function HomePage() {
             </p>
           )}
         </div>
-
-        {/* Demo Mode Banner */}
-        <Card className="mb-8 border-accent/50 bg-accent/5">
-          <CardContent className="flex flex-col sm:flex-row items-center justify-between gap-4 py-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 rounded-lg bg-accent/20">
-                <Sparkles className="w-6 h-6 text-accent" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-foreground">Try Demo Mode</h3>
-                <p className="text-sm text-muted-foreground">
-                  Experience the full game with mock players and an active lobby
-                </p>
-              </div>
-            </div>
-            <Button
-              onClick={handleTryDemo}
-              disabled={isLoadingDemo}
-              className="bg-accent hover:bg-accent/90 text-accent-foreground whitespace-nowrap"
-            >
-              <Sparkles className="w-4 h-4" />
-              {isLoadingDemo ? 'Loading Demo...' : 'Try Demo'}
-            </Button>
-          </CardContent>
-        </Card>
 
         {/* Main Actions */}
         <div className="grid md:grid-cols-2 gap-6 mb-8">

@@ -33,17 +33,11 @@ A quiz game where:
 - Server actions for all database operations (`actions/`)
 - Type-safe database types (`lib/supabase/types.ts`)
 
-⚠️ **Migration Status**: The app currently uses an **in-memory store** (`lib/store.ts`) for demo purposes. To complete the migration:
+⚠️ **Migration Status**: The app currently uses an **in-memory store** (`lib/store.ts`) for client-side caching. To complete the migration:
 1. Set up a Supabase project
 2. Run the migration files in order
 3. Update components to use server actions instead of the store
 4. Enable Realtime subscriptions for live updates
-
-### Demo Mode
-The app includes a "Try Demo" feature that seeds mock data including:
-- 10 demo players with various stats
-- 10 sample questions
-- An active lobby session
 
 ## Features
 
@@ -281,7 +275,6 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 - "Host a Quiz" button
 - Link to submit questions
 - Link to scoreboard
-- Demo mode option
 - Welcome message if user has registered alias
 
 ### 2. Alias Registration Screen (`/register`)
@@ -341,8 +334,8 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 ### Architecture
 
 **Current State**: The app includes both implementations:
-- **Legacy**: In-memory store (`lib/store.ts`) - used for demo mode
-- **New**: Supabase with server actions - ready for integration
+- **Client-side cache**: In-memory store (`lib/store.ts`) - used for client-side caching and Realtime subscriptions
+- **Backend**: Supabase with server actions - handles all database operations
 
 **Supabase Infrastructure**:
 - Client utilities in `lib/supabase/` for browser and server
@@ -439,4 +432,4 @@ Built with:
 
 ---
 
-**Note**: This application is currently in development. The in-memory store is suitable for local testing and demos, but production deployment requires Supabase integration for multi-user support and data persistence.
+**Note**: This application uses Supabase for data persistence and real-time updates. The in-memory store (`lib/store.ts`) serves as a client-side cache that integrates with Supabase Realtime subscriptions for optimal performance.

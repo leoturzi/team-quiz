@@ -19,10 +19,6 @@ class QuizStore {
   private participants: Map<string, QuizParticipant> = new Map()
   private answers: Map<string, Answer> = new Map()
   private listeners: Set<() => void> = new Set()
-  
-  // Demo mode support
-  private demoSessionId: string | null = null
-  private isDemoMode: boolean = false
 
   // Realtime subscriptions
   private supabase = createClient()
@@ -321,117 +317,6 @@ class QuizStore {
 
   async getSessionScoreboard(sessionId: string): Promise<ScoreboardEntry[]> {
     return await quizActions.getSessionScoreboard(sessionId)
-  }
-
-  // ============ Demo Mode Methods ============
-
-  seedDemoData(): { playerId: string; playerAlias: string; sessionCode: string } {
-    this.isDemoMode = true
-    
-    // Create demo players with stats (in-memory only for demo)
-    const demoPlayers = [
-      { alias: 'ByteNinja', correct: 45, total: 50 },
-      { alias: 'CodeWizard', correct: 42, total: 50 },
-      { alias: 'StackOverflow', correct: 38, total: 48 },
-      { alias: 'BugHunter', correct: 35, total: 45 },
-      { alias: 'GitGuru', correct: 33, total: 42 },
-      { alias: 'ReactRocket', correct: 30, total: 40 },
-      { alias: 'TypeScriptTitan', correct: 28, total: 38 },
-      { alias: 'AsyncAce', correct: 25, total: 35 },
-      { alias: 'APIArtist', correct: 22, total: 32 },
-      { alias: 'DevOpsDude', correct: 20, total: 30 },
-    ]
-
-    const createdPlayers: Player[] = []
-    demoPlayers.forEach((dp) => {
-      const id = generateUUID()
-      const player: Player = {
-        id,
-        alias: dp.alias,
-        totalQuestionsAnswered: dp.total,
-        totalCorrectAnswers: dp.correct,
-        createdAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000),
-      }
-      this.players.set(id, player)
-      createdPlayers.push(player)
-    })
-
-    // Create the current user's player
-    const currentUserId = generateUUID()
-    const currentUser: Player = {
-      id: currentUserId,
-      alias: 'DemoPlayer',
-      totalQuestionsAnswered: 0,
-      totalCorrectAnswers: 0,
-      createdAt: new Date(),
-    }
-    this.players.set(currentUserId, currentUser)
-
-    // Store in localStorage for the current user
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('quiz_player_id', currentUserId)
-      localStorage.setItem('quiz_alias', 'DemoPlayer')
-    }
-
-    // Create a demo session with the first player as host
-    const hostPlayer = createdPlayers[0]
-    const sessionId = generateUUID()
-    const lobbyCode = 'DEMO42'
-    const session: QuizSession = {
-      id: sessionId,
-      lobbyCode,
-      hostPlayerId: hostPlayer.id,
-      status: 'waiting',
-      currentQuestionIndex: 0,
-      questionIds: [],
-      createdAt: new Date(),
-    }
-    this.sessions.set(sessionId, session)
-    this.demoSessionId = sessionId
-
-    // Add participants to the session (first 5 players)
-    createdPlayers.slice(0, 5).forEach((player) => {
-      const participantId = generateUUID()
-      const participant: QuizParticipant = {
-        id: participantId,
-        quizSessionId: sessionId,
-        playerId: player.id,
-        playerAlias: player.alias,
-        joinedAt: new Date(Date.now() - Math.random() * 5 * 60 * 1000),
-      }
-      this.participants.set(participantId, participant)
-    })
-
-    this.notify()
-
-    return {
-      playerId: currentUserId,
-      playerAlias: 'DemoPlayer',
-      sessionCode: lobbyCode,
-    }
-  }
-
-  getDemoSessionId(): string | null {
-    return this.demoSessionId
-  }
-
-  clearDemoData() {
-    if (!this.isDemoMode) return
-    
-    this.players.clear()
-    this.sessions.clear()
-    this.participants.clear()
-    this.answers.clear()
-    this.demoSessionId = null
-    this.isDemoMode = false
-    
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('quiz_player_id')
-      localStorage.removeItem('quiz_alias')
-    }
-    
-    // Questions will be loaded on-demand when needed
-    this.notify()
   }
 
   private seedQuestions() {

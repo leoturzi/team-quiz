@@ -413,26 +413,6 @@ useEffect(() => {
 |--------|-------------|
 | `subscribe(listener)` | Subscribe to cache changes |
 
-## Demo Mode
-
-The store includes demo mode for testing without a database:
-
-```typescript
-// Seed demo data
-const { playerId, playerAlias, sessionCode } = store.seedDemoData()
-
-// Get demo session ID
-const sessionId = store.getDemoSessionId()
-
-// Clear demo data
-store.clearDemoData()
-```
-
-Demo mode creates:
-- 10 fake players with stats
-- A demo session with code `DEMO42`
-- 5 participants in the session
-
 ## Best Practices
 
 1. **Always use the singleton**: Import `store` from `lib/store.ts`, don't create new instances
