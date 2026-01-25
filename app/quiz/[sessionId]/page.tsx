@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -47,8 +47,11 @@ export default function QuizPage() {
   const [isFlagged, setIsFlagged] = useState(false)
   const [sessionScoreboard, setSessionScoreboard] = useState<ScoreboardEntry[]>([])
 
+  // Use a ref to track displayed question index to avoid callback recreation
+  const displayedQuestionIndexRef = useRef<number>(-1)
+
   // Update UI from store cache (realtime updates the cache automatically)
-  const updateFromStore = useCallback(() => {
+  const updateFromStore = useCallback(async () => {
     const currentSession = store.getSessionById(sessionId)
     if (!currentSession) return
 
@@ -60,10 +63,18 @@ export default function QuizPage() {
       return
     }
 
-    const questionId = currentSession.questionIds[currentSession.currentQuestionIndex]
-    const question = store.getQuestionById(questionId)
+    const questionIndex = currentSession.currentQuestionIndex
+    const questionId = currentSession.questionIds[questionIndex]
+    let question = store.getQuestionById(questionId)
 
-    if (question && (!currentQuestion || currentQuestion.id !== question.id)) {
+    // If question is not in cache, fetch it (this happens for non-host players)
+    if (!question) {
+      await store.refreshQuestion(questionId)
+      question = store.getQuestionById(questionId)
+    }
+
+    // Update question UI if the question index changed
+    if (question && questionIndex !== displayedQuestionIndexRef.current) {
       setCurrentQuestion(question)
       setShuffledAnswers(shuffleAnswers(question))
       setSelectedAnswer(null)
@@ -71,12 +82,18 @@ export default function QuizPage() {
       setShowResults(false)
       setTimeLeft(60)
       setIsFlagged(question.flagged)
+      displayedQuestionIndexRef.current = questionIndex
+      
+      // Also reset answers for the new question
+      setAnswers([])
     }
 
-    // Update from cache (realtime handles updates)
-    setAnswers(store.getAnswersForQuestion(sessionId, questionId))
+    // Update answers from cache (for current question)
+    if (question) {
+      setAnswers(store.getAnswersForQuestion(sessionId, questionId))
+    }
     setParticipantCount(store.getParticipants(sessionId).length)
-  }, [sessionId, currentQuestion])
+  }, [sessionId])
 
   useEffect(() => {
     let isMounted = true
@@ -126,6 +143,7 @@ export default function QuizPage() {
         setCurrentQuestion(question)
         setShuffledAnswers(shuffleAnswers(question))
         setIsFlagged(question.flagged)
+        displayedQuestionIndexRef.current = currentSession.currentQuestionIndex
 
         // Check if player has already answered
         let existingAnswer = store.getPlayerAnswer(sessionId, questionId, storedPlayerId)
@@ -137,6 +155,11 @@ export default function QuizPage() {
           setSelectedAnswer(existingAnswer.selectedAnswer)
           setHasAnswered(true)
         }
+        
+        // Load initial answers for this question
+        await store.refreshAnswersForQuestion(sessionId, questionId)
+        if (!isMounted) return
+        setAnswers(store.getAnswersForQuestion(sessionId, questionId))
       }
     }
 
@@ -207,9 +230,9 @@ export default function QuizPage() {
     if (!session || !isHost) return
     try {
       await store.nextQuestion(sessionId)
-      // Realtime will update the store, then updateFromStore will sync UI
-      // But we can manually trigger it to ensure immediate update
-      updateFromStore()
+      // Realtime will update the store for other players
+      // Manually trigger update for immediate host feedback
+      await updateFromStore()
     } catch (error) {
       console.error('Failed to advance question:', error)
     }

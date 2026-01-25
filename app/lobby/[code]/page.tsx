@@ -5,12 +5,14 @@ import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Slider } from '@/components/ui/slider'
 import { store } from '@/lib/store'
 import type { QuizSession, QuizParticipant } from '@/lib/types'
-import { ArrowLeft, Copy, Check, Users, Play, Loader2, Tag, X } from 'lucide-react'
+import { ArrowLeft, Copy, Check, Users, Play, Loader2, Tag, X, HelpCircle } from 'lucide-react'
 
-const QUESTIONS_PER_QUIZ = 1
-const MIN_QUESTIONS_PER_QUIZ = 1
+const MIN_QUESTIONS = 5
+const MAX_QUESTIONS = 30
+const DEFAULT_QUESTIONS = 10
 export default function LobbyPage() {
   const params = useParams()
   const code = params.code as string
@@ -25,6 +27,7 @@ export default function LobbyPage() {
   const [isStarting, setIsStarting] = useState(false)
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [availableTags, setAvailableTags] = useState<string[]>([])
+  const [questionCount, setQuestionCount] = useState(DEFAULT_QUESTIONS)
 
   // Update UI from store cache (realtime updates the cache automatically)
   const updateFromStore = useCallback(() => {
@@ -150,10 +153,10 @@ export default function LobbyPage() {
 
     try {
       // Get random questions
-      const questions = await store.getRandomQuestions(QUESTIONS_PER_QUIZ, selectedTags.length > 0 ? selectedTags : undefined)
+      const questions = await store.getRandomQuestions(questionCount, selectedTags.length > 0 ? selectedTags : undefined)
 
-      if (questions.length < MIN_QUESTIONS_PER_QUIZ) {
-        setError('Not enough questions available. Please add more questions or remove tag filters.')
+      if (questions.length < questionCount) {
+        setError(`Not enough questions available. Only ${questions.length} questions found. Please reduce the count or remove tag filters.`)
         setIsStarting(false)
         return
       }
@@ -277,6 +280,30 @@ export default function LobbyPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Question Count Slider */}
+              <div className="space-y-3">
+                <label className="text-sm font-medium text-foreground flex items-center gap-2">
+                  <HelpCircle className="w-4 h-4 text-muted-foreground" />
+                  Number of Questions
+                </label>
+                <div className="flex items-center gap-4">
+                  <Slider
+                    value={[questionCount]}
+                    onValueChange={(value) => setQuestionCount(value[0])}
+                    min={MIN_QUESTIONS}
+                    max={MAX_QUESTIONS}
+                    step={1}
+                    className="flex-1"
+                  />
+                  <span className="text-2xl font-bold text-primary w-12 text-right tabular-nums">
+                    {questionCount}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Select between {MIN_QUESTIONS} and {MAX_QUESTIONS} questions
+                </p>
+              </div>
+
               {/* Tag Filter */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground flex items-center gap-2">
