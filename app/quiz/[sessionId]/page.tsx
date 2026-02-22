@@ -15,8 +15,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { store } from '@/lib/store'
+import { useQuizTimer } from '@/hooks/use-quiz-timer'
 import type { QuizSession, Question, Answer, ScoreboardEntry } from '@/lib/types'
-import { Flag, ArrowRight, Check, X, Users, Trophy, Clock, Home, XCircle } from 'lucide-react'
+import { Flag, ArrowRight, Check, X, Users, Trophy, Clock, Home, XCircle, Zap } from 'lucide-react'
 
 interface ShuffledAnswers {
   answers: string[]
@@ -48,8 +49,6 @@ export default function QuizPage() {
   const [isHost, setIsHost] = useState(false)
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null)
   const [hasAnswered, setHasAnswered] = useState(false)
-  const [showResults, setShowResults] = useState(false)
-  const [timeLeft, setTimeLeft] = useState(60)
   const [answers, setAnswers] = useState<Answer[]>([])
   const [participantCount, setParticipantCount] = useState(0)
   const [isFlagged, setIsFlagged] = useState(false)
@@ -57,6 +56,13 @@ export default function QuizPage() {
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
   const [isAdvancing, setIsAdvancing] = useState(false)
+
+  const { timeLeft, showResults, timeBombActive, timeBombFlash, timeBombPulse } = useQuizTimer({
+    currentQuestion,
+    answerCount: answers.length,
+    participantCount,
+    questionIndex: session?.currentQuestionIndex ?? -1,
+  })
 
   // Use a ref to track displayed question index to avoid callback recreation
   const displayedQuestionIndexRef = useRef<number>(-1)
@@ -80,6 +86,18 @@ export default function QuizPage() {
 
     const questionIndex = currentSession.currentQuestionIndex
     const questionId = currentSession.questionIds[questionIndex]
+    const questionChanged = questionIndex !== displayedQuestionIndexRef.current
+
+    // Reset question-scoped UI state immediately when index changes.
+    // This avoids a transient frame where old answer counts can leak into
+    // the next question while the new question is being fetched.
+    if (questionChanged) {
+      setSelectedAnswer(null)
+      setHasAnswered(false)
+      setAnswers([])
+      displayedQuestionIndexRef.current = questionIndex
+    }
+
     let question = store.getQuestionById(questionId)
 
     // If question is not in cache, fetch it (this happens for non-host players)
@@ -89,18 +107,10 @@ export default function QuizPage() {
     }
 
     // Update question UI if the question index changed
-    if (question && questionIndex !== displayedQuestionIndexRef.current) {
+    if (question && questionChanged) {
       setCurrentQuestion(question)
       setShuffledAnswers(shuffleAnswers(question))
-      setSelectedAnswer(null)
-      setHasAnswered(false)
-      setShowResults(false)
-      setTimeLeft(60)
       setIsFlagged(question.flagged)
-      displayedQuestionIndexRef.current = questionIndex
-      
-      // Also reset answers for the new question
-      setAnswers([])
     }
 
     // Update answers from cache (for current question)
@@ -193,31 +203,6 @@ export default function QuizPage() {
       unsubscribeStore()
     }
   }, [sessionId, router, updateFromStore])
-
-  // Timer effect
-  useEffect(() => {
-    if (showResults || !currentQuestion) return
-
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer)
-          setShowResults(true)
-          return 0
-        }
-        return prev - 1
-      })
-    }, 1000)
-
-    return () => clearInterval(timer)
-  }, [showResults, currentQuestion])
-
-  // Auto-show results when all participants have answered
-  useEffect(() => {
-    if (!showResults && answers.length >= participantCount && participantCount > 0) {
-      setShowResults(true)
-    }
-  }, [answers.length, participantCount, showResults])
 
   const handleSelectAnswer = async (answer: string) => {
     if (hasAnswered || showResults || !currentQuestion || !playerId) return
@@ -400,15 +385,20 @@ export default function QuizPage() {
               {answers.length}/{participantCount} answered
             </div>
             <div
+              key={timeBombPulse}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${
                 timeLeft <= 10
                   ? 'bg-destructive/20 text-destructive'
                   : timeLeft <= 30
                     ? 'bg-accent/20 text-accent'
                     : 'bg-secondary text-secondary-foreground'
-              }`}
+              } ${timeBombFlash ? 'time-bomb-active animate-time-bomb-impact' : ''}`}
             >
-              <Clock className="w-4 h-4" />
+              {timeBombActive ? (
+                <Zap className="w-4 h-4" />
+              ) : (
+                <Clock className="w-4 h-4" />
+              )}
               {timeLeft}s
             </div>
             {isHost && (
@@ -416,7 +406,7 @@ export default function QuizPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setShowCancelDialog(true)}
-                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                className="text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer"
               >
                 <XCircle className="w-4 h-4" />
                 Cancel Quiz
@@ -525,19 +515,19 @@ export default function QuizPage() {
                 variant="outline"
                 onClick={handleFlagQuestion}
                 disabled={isFlagged}
-                className="flex-1 bg-transparent"
+                className="flex-1 bg-transparent cursor-pointer"
               >
                 <Flag className={`w-4 h-4 ${isFlagged ? 'text-accent' : ''}`} />
                 {isFlagged ? 'Flagged for Review' : 'Flag Question'}
               </Button>
               {isHost && session.currentQuestionIndex < session.questionIds.length - 1 && (
-                <Button onClick={handleNextQuestion} disabled={isAdvancing} className="flex-1">
+                <Button onClick={handleNextQuestion} disabled={isAdvancing} className="flex-1 cursor-pointer">
                   Next Question
                   <ArrowRight className="w-4 h-4" />
                 </Button>
               )}
               {isHost && session.currentQuestionIndex === session.questionIds.length - 1 && (
-                <Button onClick={handleNextQuestion} disabled={isAdvancing} className="flex-1">
+                <Button onClick={handleNextQuestion} disabled={isAdvancing} className="flex-1 cursor-pointer">
                   Finish Quiz
                   <Trophy className="w-4 h-4" />
                 </Button>
@@ -567,6 +557,7 @@ export default function QuizPage() {
                 variant="outline"
                 onClick={() => setShowCancelDialog(false)}
                 disabled={isCancelling}
+                className="cursor-pointer"
               >
                 Keep Quiz
               </Button>
@@ -574,6 +565,7 @@ export default function QuizPage() {
                 variant="destructive"
                 onClick={handleCancelQuiz}
                 disabled={isCancelling}
+                className="cursor-pointer"
               >
                 {isCancelling ? 'Cancelling...' : 'Yes, Cancel Quiz'}
               </Button>

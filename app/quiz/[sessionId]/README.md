@@ -7,6 +7,7 @@ This page is the **in-game experience** for a quiz session. Players arrive here 
 - [How to Get Here](#how-to-get-here)
 - [Game Flow Overview](#game-flow-overview)
 - [Timer](#timer)
+- [Time Bomb](#time-bomb)
 - [Realtime Synchronization](#realtime-synchronization)
 - [Participant Experience](#participant-experience)
 - [Host Controls](#host-controls)
@@ -47,7 +48,41 @@ This page is the **in-game experience** for a quiz session. Players arrive here 
   - `> 30s` → Secondary (neutral) badge
   - `≤ 30s` → Accent (warning) badge
   - `≤ 10s` → Destructive (urgent) badge
-- **Implementation**: `setInterval` in a `useEffect`, cleared on unmount or when `showResults`/`currentQuestion` changes
+- **Implementation**: All timer logic (base countdown, time bomb, auto-results) lives in `hooks/use-quiz-timer.ts`
+
+---
+
+## Time Bomb
+
+A pressure mechanic that shortens the timer for players who haven't answered yet, activated by other players submitting answers.
+
+- **Threshold**: Activates after **50% of participants** have answered the current question
+- **Penalty**: Each new answer after the threshold deducts **5 seconds** from the remaining time
+- **Who is affected**: Only players who haven't answered yet. Players who already locked in their answer are unaffected
+- **Visual feedback**:
+  - Timer badge **shakes** briefly on each deduction
+  - Clock icon switches to a **lightning bolt** (⚡) while the bomb is active
+- **Results trigger**: If the time bomb reduces the timer to 0, results are shown immediately
+
+### Example (8 players, 60s timer)
+
+| Event | Timer effect |
+|-------|-------------|
+| Players 1–4 answer | No penalty (at or below 50% threshold) |
+| Player 5 answers | −5s for remaining 3 players |
+| Player 6 answers | −5s for remaining 2 players |
+| Player 7 answers | −5s for last player |
+| **Max total deduction** | **15s** (last player still has ~45s) |
+
+### Configuration
+
+Constants are defined in `hooks/use-quiz-timer.ts`:
+
+| Constant | Default | Description |
+|----------|---------|-------------|
+| `QUESTION_DURATION_SECONDS` | 60 | Base timer per question |
+| `TIME_BOMB_PENALTY_SECONDS` | 5 | Seconds deducted per answer after threshold |
+| `TIME_BOMB_THRESHOLD_RATIO` | 0.5 | Fraction of participants required before bomb activates |
 
 ---
 
@@ -121,7 +156,7 @@ The page stays in sync across all participants via **Supabase Realtime** (`postg
 
 ### When Results Appear
 
-1. **Timer expires** (60s)
+1. **Timer expires** (60s base, may be shortened by time bomb)
 2. **All participants answered** (`answers.length >= participantCount`)
 
 ### Results UI
@@ -166,6 +201,7 @@ Question content is **fixed when the quiz starts** (chosen in the lobby with cou
 
 | Dependency | Role |
 |------------|------|
+| `hooks/use-quiz-timer.ts` | Timer countdown, time bomb deductions, auto-results |
 | `lib/store.ts` | Cache, `subscribeToSession()`, `subscribe()`, actions for session/answers |
 | `lib/types.ts` | `QuizSession`, `Question`, `Answer`, `ScoreboardEntry`, etc. |
 | `actions/quiz.ts` | Server actions: `nextQuestion`, `submitAnswer`, `cancelQuizSession`, etc. |
@@ -184,8 +220,10 @@ Question content is **fixed when the quiz starts** (chosen in the lobby with cou
 | `shuffledAnswers` | Shuffled options + correct index |
 | `playerId` / `isHost` | Identity and role |
 | `selectedAnswer` / `hasAnswered` | Answer status for current user |
-| `showResults` | Whether results view is shown |
-| `timeLeft` | Countdown (60 → 0) |
+| `showResults` | Whether results view is shown (from `useQuizTimer`) |
+| `timeLeft` | Countdown (60 → 0) (from `useQuizTimer`) |
+| `timeBombActive` | Whether the time bomb is currently applying pressure (from `useQuizTimer`) |
+| `timeBombFlash` | Brief `true` pulse on each time bomb deduction (from `useQuizTimer`) |
 | `answers` | All answers for current question |
 | `participantCount` | Total participants |
 | `isAdvancing` | Guards Next Question / Finish Quiz against concurrent clicks |

@@ -163,7 +163,7 @@ function RegisterContent() {
 
               <Button
                 type="submit"
-                className="w-full"
+                className="w-full cursor-pointer"
                 disabled={isSubmitting || !isAvailable || alias.length < 2}
               >
                 {isSubmitting ? 'Registering...' : 'Continue'}
