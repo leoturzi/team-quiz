@@ -321,7 +321,7 @@ export default function LobbyPage() {
                     min={MIN_QUESTIONS}
                     max={MAX_QUESTIONS}
                     step={1}
-                    className="flex-1"
+                    className="flex-1 cursor-pointer"
                   />
                   <span className="text-2xl font-bold text-primary w-12 text-right tabular-nums">
                     {questionCount}
@@ -344,7 +344,7 @@ export default function LobbyPage() {
                       key={tag}
                       type="button"
                       onClick={() => toggleTag(tag)}
-                      className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                      className={`px-3 py-1.5 text-sm rounded-md transition-colors cursor-pointer ${
                         selectedTags.includes(tag)
                           ? 'bg-primary text-primary-foreground'
                           : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
@@ -365,7 +365,7 @@ export default function LobbyPage() {
                 <Button
                   onClick={startQuiz}
                   disabled={participants.length < 1 || isStarting}
-                  className="w-full"
+                  className="w-full cursor-pointer"
                   size="lg"
                 >
                   {isStarting ? (
@@ -384,7 +384,7 @@ export default function LobbyPage() {
                   variant="outline"
                   onClick={() => setShowCancelDialog(true)}
                   disabled={isStarting || isCancelling}
-                  className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
+                  className="w-full text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer"
                 >
                   <XCircle className="w-4 h-4" />
                   Cancel Session
@@ -425,6 +425,7 @@ export default function LobbyPage() {
                 variant="outline"
                 onClick={() => setShowCancelDialog(false)}
                 disabled={isCancelling}
+                className="cursor-pointer"
               >
                 Keep Session
               </Button>
@@ -432,6 +433,7 @@ export default function LobbyPage() {
                 variant="destructive"
                 onClick={handleCancelQuiz}
                 disabled={isCancelling}
+                className="cursor-pointer"
               >
                 {isCancelling ? 'Cancelling...' : 'Yes, Cancel Session'}
               </Button>

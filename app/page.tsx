@@ -107,7 +107,7 @@ export default function HomePage() {
               <Button
                 onClick={handleJoinQuiz}
                 disabled={lobbyCode.trim().length < 4}
-                className="w-full"
+                className="w-full cursor-pointer"
               >
                 <Play className="w-4 h-4" />
                 Join Quiz
@@ -134,7 +134,7 @@ export default function HomePage() {
                 onClick={handleCreateQuiz}
                 disabled={isCreating}
                 variant="secondary"
-                className="w-full"
+                className="w-full cursor-pointer"
               >
                 <Zap className="w-4 h-4" />
                 {isCreating ? 'Creating...' : 'Create Quiz'}

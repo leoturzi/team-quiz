@@ -416,7 +416,7 @@ export default function QuizPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setShowCancelDialog(true)}
-                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                className="text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer"
               >
                 <XCircle className="w-4 h-4" />
                 Cancel Quiz
@@ -525,19 +525,19 @@ export default function QuizPage() {
                 variant="outline"
                 onClick={handleFlagQuestion}
                 disabled={isFlagged}
-                className="flex-1 bg-transparent"
+                className="flex-1 bg-transparent cursor-pointer"
               >
                 <Flag className={`w-4 h-4 ${isFlagged ? 'text-accent' : ''}`} />
                 {isFlagged ? 'Flagged for Review' : 'Flag Question'}
               </Button>
               {isHost && session.currentQuestionIndex < session.questionIds.length - 1 && (
-                <Button onClick={handleNextQuestion} disabled={isAdvancing} className="flex-1">
+                <Button onClick={handleNextQuestion} disabled={isAdvancing} className="flex-1 cursor-pointer">
                   Next Question
                   <ArrowRight className="w-4 h-4" />
                 </Button>
               )}
               {isHost && session.currentQuestionIndex === session.questionIds.length - 1 && (
-                <Button onClick={handleNextQuestion} disabled={isAdvancing} className="flex-1">
+                <Button onClick={handleNextQuestion} disabled={isAdvancing} className="flex-1 cursor-pointer">
                   Finish Quiz
                   <Trophy className="w-4 h-4" />
                 </Button>
@@ -567,6 +567,7 @@ export default function QuizPage() {
                 variant="outline"
                 onClick={() => setShowCancelDialog(false)}
                 disabled={isCancelling}
+className="cursor-pointer"
               >
                 Keep Quiz
               </Button>
@@ -574,6 +575,7 @@ export default function QuizPage() {
                 variant="destructive"
                 onClick={handleCancelQuiz}
                 disabled={isCancelling}
+                className="cursor-pointer"
               >
                 {isCancelling ? 'Cancelling...' : 'Yes, Cancel Quiz'}
               </Button>
