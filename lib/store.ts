@@ -213,17 +213,10 @@ class QuizStore {
 
   async nextQuestion(sessionId: string): Promise<void> {
     await quizActions.nextQuestion(sessionId)
-    const session = this.sessions.get(sessionId)
-    if (session) {
-      session.currentQuestionIndex++
-      if (session.currentQuestionIndex >= session.questionIds.length) {
-        session.status = 'completed'
-        session.endedAt = new Date()
-      }
-      this.notify()
-    } else {
-      await this.refreshSession(sessionId)
-    }
+    // Refresh from DB — avoid double-increment race with realtime.
+    // Realtime can overwrite cache with correct index before we return; a local
+    // increment on top of that would skip a question (e.g. 1 → 3 instead of 2).
+    await this.refreshSession(sessionId)
   }
 
   async cancelSession(sessionId: string): Promise<void> {

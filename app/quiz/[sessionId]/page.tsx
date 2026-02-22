@@ -56,6 +56,7 @@ export default function QuizPage() {
   const [sessionScoreboard, setSessionScoreboard] = useState<ScoreboardEntry[]>([])
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
+  const [isAdvancing, setIsAdvancing] = useState(false)
 
   // Use a ref to track displayed question index to avoid callback recreation
   const displayedQuestionIndexRef = useRef<number>(-1)
@@ -241,14 +242,15 @@ export default function QuizPage() {
   }
 
   const handleNextQuestion = async () => {
-    if (!session || !isHost) return
+    if (!session || !isHost || isAdvancing) return
+    setIsAdvancing(true)
     try {
       await store.nextQuestion(sessionId)
-      // Realtime will update the store for other players
-      // Manually trigger update for immediate host feedback
       await updateFromStore()
     } catch (error) {
       console.error('Failed to advance question:', error)
+    } finally {
+      setIsAdvancing(false)
     }
   }
 
@@ -529,13 +531,13 @@ export default function QuizPage() {
                 {isFlagged ? 'Flagged for Review' : 'Flag Question'}
               </Button>
               {isHost && session.currentQuestionIndex < session.questionIds.length - 1 && (
-                <Button onClick={handleNextQuestion} className="flex-1">
+                <Button onClick={handleNextQuestion} disabled={isAdvancing} className="flex-1">
                   Next Question
                   <ArrowRight className="w-4 h-4" />
                 </Button>
               )}
               {isHost && session.currentQuestionIndex === session.questionIds.length - 1 && (
-                <Button onClick={handleNextQuestion} className="flex-1">
+                <Button onClick={handleNextQuestion} disabled={isAdvancing} className="flex-1">
                   Finish Quiz
                   <Trophy className="w-4 h-4" />
                 </Button>
