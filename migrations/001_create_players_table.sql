@@ -1,5 +1,4 @@
 -- Migration: Create players table
--- Created: 2024
 -- Description: Stores player aliases and their cumulative scores
 
 -- Forward migration

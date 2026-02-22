@@ -1,5 +1,4 @@
 -- Migration: Create answers table
--- Created: 2024
 -- Description: Records each player's answer to each question in a session
 
 -- Forward migration

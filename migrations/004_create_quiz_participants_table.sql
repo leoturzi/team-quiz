@@ -1,5 +1,4 @@
 -- Migration: Create quiz_participants table
--- Created: 2024
 -- Description: Tracks which players joined a quiz session
 
 -- Forward migration

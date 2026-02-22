@@ -1,5 +1,4 @@
 -- Migration: Create questions table
--- Created: 2024
 -- Description: Stores all submitted questions and their answers
 
 -- Forward migration

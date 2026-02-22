@@ -1,5 +1,4 @@
 -- Migration: Create quiz_sessions table
--- Created: 2024
 -- Description: Stores metadata about each quiz game session
 
 -- Forward migration

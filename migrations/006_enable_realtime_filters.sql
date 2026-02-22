@@ -1,5 +1,4 @@
 -- Migration: Enable Realtime for quiz tables
--- Created: 2026
 -- Description: Enables RLS with SELECT policies required for postgres_changes to work
 
 -- Forward migration
