@@ -102,10 +102,19 @@ curl -s "https://api.trello.com/1/boards/{boardId}/labels?fields=id,name,color&k
 ]
 ```
 
-After discovery, store these IDs in `.env.local`:
+## Project Board
+
+| Property | Value |
+|----------|-------|
+| Board ID | `Xol8X9fB` |
+| Board Name | `team-quiz` |
+
+All agents should use this board by default. No discovery needed for the board ID.
+
+After discovering list and label IDs, store them in `.env.local`:
 
 ```
-TRELLO_BOARD_ID=...
+TRELLO_BOARD_ID=Xol8X9fB
 TRELLO_INBOX_LIST_ID=...
 TRELLO_BACKLOG_LIST_ID=...
 TRELLO_LABEL_BUG_ID=...
