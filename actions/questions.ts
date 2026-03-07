@@ -1,29 +1,112 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import type { Question } from '@/lib/types'
+import type { Question, QuestionType, QuestionStructure } from '@/lib/types'
+
+function mapRowToQuestion(q: any): Question {
+  const questionType: QuestionType = q.question_type || 'multiple_choice'
+
+  let questionStructure: QuestionStructure = q.question_structure
+  if (!questionStructure) {
+    questionStructure = {
+      options: [
+        { text: q.correct_answer, isCorrect: true },
+        { text: q.wrong_answer_1, isCorrect: false },
+        { text: q.wrong_answer_2, isCorrect: false },
+        { text: q.wrong_answer_3, isCorrect: false },
+      ],
+    }
+  }
+
+  return {
+    id: q.id,
+    questionText: q.question_text,
+    questionType,
+    questionStructure,
+    correctAnswer: q.correct_answer ?? '',
+    wrongAnswer1: q.wrong_answer_1 ?? '',
+    wrongAnswer2: q.wrong_answer_2 ?? '',
+    wrongAnswer3: q.wrong_answer_3 ?? '',
+    tags: q.tags || [],
+    flagged: q.flagged || false,
+    flagReason: q.flag_reason || undefined,
+    createdAt: new Date(q.created_at),
+  }
+}
 
 /**
- * Submit a new question
+ * Build the flat legacy columns from the structured data so old columns
+ * stay in sync during the transition period.
+ */
+function buildLegacyColumns(
+  questionType: QuestionType,
+  structure: QuestionStructure
+): { correct_answer: string; wrong_answer_1: string; wrong_answer_2: string; wrong_answer_3: string } {
+  if (questionType === 'sequence') {
+    const items = (structure as { items: { text: string; correctPosition: number }[] }).items
+    return {
+      correct_answer: items.map((i) => i.text).join(' → '),
+      wrong_answer_1: '',
+      wrong_answer_2: '',
+      wrong_answer_3: '',
+    }
+  }
+
+  const options = (structure as { options: { text: string; isCorrect: boolean }[] }).options
+  const correct = options.find((o) => o.isCorrect)?.text ?? ''
+  const wrong = options.filter((o) => !o.isCorrect).map((o) => o.text)
+
+  return {
+    correct_answer: correct,
+    wrong_answer_1: wrong[0] ?? '',
+    wrong_answer_2: wrong[1] ?? '',
+    wrong_answer_3: wrong[2] ?? '',
+  }
+}
+
+/**
+ * Submit a new question (supports all question types)
  */
 export async function submitQuestion(data: {
   questionText: string
-  correctAnswer: string
-  wrongAnswer1: string
-  wrongAnswer2: string
-  wrongAnswer3: string
+  questionType?: QuestionType
+  questionStructure?: QuestionStructure
+  correctAnswer?: string
+  wrongAnswer1?: string
+  wrongAnswer2?: string
+  wrongAnswer3?: string
   tags?: string[]
 }): Promise<Question> {
   const supabase = await createClient()
+
+  const questionType: QuestionType = data.questionType || 'multiple_choice'
+
+  let questionStructure: QuestionStructure
+  if (data.questionStructure) {
+    questionStructure = data.questionStructure
+  } else {
+    questionStructure = {
+      options: [
+        { text: data.correctAnswer || '', isCorrect: true },
+        { text: data.wrongAnswer1 || '', isCorrect: false },
+        { text: data.wrongAnswer2 || '', isCorrect: false },
+        { text: data.wrongAnswer3 || '', isCorrect: false },
+      ],
+    }
+  }
+
+  const legacy = buildLegacyColumns(questionType, questionStructure)
 
   const { data: question, error } = await supabase
     .from('questions')
     .insert({
       question_text: data.questionText,
-      correct_answer: data.correctAnswer,
-      wrong_answer_1: data.wrongAnswer1,
-      wrong_answer_2: data.wrongAnswer2,
-      wrong_answer_3: data.wrongAnswer3,
+      question_type: questionType,
+      question_structure: questionStructure,
+      correct_answer: legacy.correct_answer,
+      wrong_answer_1: legacy.wrong_answer_1,
+      wrong_answer_2: legacy.wrong_answer_2,
+      wrong_answer_3: legacy.wrong_answer_3,
       tags: data.tags || [],
       flagged: false,
     })
@@ -34,18 +117,7 @@ export async function submitQuestion(data: {
     throw new Error(`Failed to submit question: ${error?.message || 'Unknown error'}`)
   }
 
-  return {
-    id: question.id,
-    questionText: question.question_text,
-    correctAnswer: question.correct_answer,
-    wrongAnswer1: question.wrong_answer_1,
-    wrongAnswer2: question.wrong_answer_2,
-    wrongAnswer3: question.wrong_answer_3,
-    tags: question.tags,
-    flagged: question.flagged,
-    flagReason: question.flag_reason || undefined,
-    createdAt: new Date(question.created_at),
-  }
+  return mapRowToQuestion(question)
 }
 
 /**
@@ -95,22 +167,10 @@ export async function getRandomQuestions(
     return []
   }
 
-  // Shuffle and take count
   const shuffled = [...(data || [])].sort(() => Math.random() - 0.5)
   const selected = shuffled.slice(0, Math.min(count, shuffled.length))
 
-  return selected.map((q: any) => ({
-    id: q.id,
-    questionText: q.question_text,
-    correctAnswer: q.correct_answer,
-    wrongAnswer1: q.wrong_answer_1,
-    wrongAnswer2: q.wrong_answer_2,
-    wrongAnswer3: q.wrong_answer_3,
-    tags: q.tags || [],
-    flagged: q.flagged || false,
-    flagReason: q.flag_reason || undefined,
-    createdAt: new Date(q.created_at),
-  }))
+  return selected.map(mapRowToQuestion)
 }
 
 /**
@@ -129,18 +189,7 @@ export async function getQuestionById(id: string): Promise<Question | null> {
     return null
   }
 
-  return {
-    id: data.id,
-    questionText: data.question_text,
-    correctAnswer: data.correct_answer,
-    wrongAnswer1: data.wrong_answer_1,
-    wrongAnswer2: data.wrong_answer_2,
-    wrongAnswer3: data.wrong_answer_3,
-    tags: data.tags,
-    flagged: data.flagged,
-    flagReason: data.flag_reason || undefined,
-    createdAt: new Date(data.created_at),
-  }
+  return mapRowToQuestion(data)
 }
 
 /**

@@ -1,7 +1,73 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import type { QuizSession, QuizParticipant, Answer, ScoreboardEntry } from '@/lib/types'
+import type {
+  QuizSession,
+  QuizParticipant,
+  Answer,
+  ScoreboardEntry,
+  QuestionType,
+  QuestionStructure,
+  SelectedAnswerData,
+} from '@/lib/types'
+
+/**
+ * Evaluate whether an answer is correct based on question type.
+ * Centralised server-side so clients never need the answer key.
+ */
+function evaluateAnswer(
+  questionType: QuestionType,
+  questionStructure: QuestionStructure,
+  answerData: SelectedAnswerData
+): boolean {
+  switch (questionType) {
+    case 'multiple_choice':
+    case 'true_false': {
+      if (answerData.type !== 'single') return false
+      const options = (questionStructure as { options: { text: string; isCorrect: boolean }[] }).options
+      const correct = options.find((o) => o.isCorrect)
+      return correct?.text === answerData.value
+    }
+
+    case 'multiple_answer': {
+      if (answerData.type !== 'multiple') return false
+      const options = (questionStructure as { options: { text: string; isCorrect: boolean }[] }).options
+      const correctTexts = new Set(options.filter((o) => o.isCorrect).map((o) => o.text))
+      const selectedSet = new Set(answerData.values)
+      if (correctTexts.size !== selectedSet.size) return false
+      for (const text of correctTexts) {
+        if (!selectedSet.has(text)) return false
+      }
+      return true
+    }
+
+    case 'sequence': {
+      if (answerData.type !== 'sequence') return false
+      const items = (questionStructure as { items: { text: string; correctPosition: number }[] }).items
+      const correctOrder = [...items]
+        .sort((a, b) => a.correctPosition - b.correctPosition)
+        .map((i) => i.text)
+      if (answerData.order.length !== correctOrder.length) return false
+      return answerData.order.every((text, idx) => text === correctOrder[idx])
+    }
+
+    default:
+      return false
+  }
+}
+
+function mapRowToAnswer(a: any): Answer {
+  return {
+    id: a.id,
+    quizSessionId: a.quiz_session_id,
+    questionId: a.question_id,
+    playerId: a.player_id,
+    selectedAnswer: a.selected_answer,
+    selectedAnswerData: a.selected_answer_data || undefined,
+    isCorrect: a.is_correct,
+    answeredAt: new Date(a.answered_at),
+  }
+}
 
 /**
  * Generate a unique lobby code
@@ -25,7 +91,6 @@ export async function createQuizSession(hostPlayerId: string): Promise<QuizSessi
   let attempts = 0
   const maxAttempts = 10
 
-  // Ensure unique lobby code
   while (attempts < maxAttempts) {
     const { data: existing } = await supabase
       .from('quiz_sessions')
@@ -141,7 +206,6 @@ export async function joinQuizSession(
 ): Promise<QuizParticipant> {
   const supabase = await createClient()
 
-  // First, verify the player exists in the database
   const { data: playerData, error: playerError } = await supabase
     .from('players')
     .select('alias')
@@ -152,7 +216,6 @@ export async function joinQuizSession(
     throw new Error('Player not found. Please register again.')
   }
 
-  // Check if already joined
   const { data: existing } = await supabase
     .from('quiz_participants')
     .select('*')
@@ -183,7 +246,6 @@ export async function joinQuizSession(
     throw new Error(`Failed to join session: ${error.message}`)
   }
 
-  // Get player alias
   const { data: player } = await supabase
     .from('players')
     .select('alias')
@@ -261,7 +323,6 @@ export async function startQuiz(
 export async function nextQuestion(sessionId: string): Promise<void> {
   const supabase = await createClient()
 
-  // Get current session
   const { data: session, error: fetchError } = await supabase
     .from('quiz_sessions')
     .select('current_question_index, question_ids')
@@ -291,18 +352,43 @@ export async function nextQuestion(sessionId: string): Promise<void> {
 }
 
 /**
- * Submit an answer
+ * Submit an answer — correctness is evaluated server-side.
+ *
+ * For backward compatibility, `selectedAnswer` (string) still works for
+ * multiple_choice and true_false. New question types should pass
+ * `selectedAnswerData` with the structured payload.
  */
 export async function submitAnswer(
   sessionId: string,
   questionId: string,
   playerId: string,
   selectedAnswer: string,
-  correctAnswer: string
+  _correctAnswer?: string,
+  selectedAnswerData?: SelectedAnswerData
 ): Promise<Answer> {
   const supabase = await createClient()
 
-  const isCorrect = selectedAnswer === correctAnswer
+  const { data: questionRow, error: qError } = await supabase
+    .from('questions')
+    .select('question_type, question_structure, correct_answer')
+    .eq('id', questionId)
+    .single()
+
+  if (qError || !questionRow) {
+    throw new Error(`Question not found: ${qError?.message || 'Unknown error'}`)
+  }
+
+  const questionType: QuestionType = questionRow.question_type || 'multiple_choice'
+  const questionStructure: QuestionStructure = questionRow.question_structure || {
+    options: [{ text: questionRow.correct_answer, isCorrect: true }],
+  }
+
+  const answerData: SelectedAnswerData = selectedAnswerData || {
+    type: 'single',
+    value: selectedAnswer,
+  }
+
+  const isCorrect = evaluateAnswer(questionType, questionStructure, answerData)
 
   const { data, error } = await supabase
     .from('answers')
@@ -311,6 +397,7 @@ export async function submitAnswer(
       question_id: questionId,
       player_id: playerId,
       selected_answer: selectedAnswer,
+      selected_answer_data: answerData,
       is_correct: isCorrect,
     })
     .select()
@@ -320,7 +407,6 @@ export async function submitAnswer(
     throw new Error(`Failed to submit answer: ${error.message}`)
   }
 
-  // Update player stats
   const { data: player } = await supabase
     .from('players')
     .select('total_questions_answered, total_correct_answers')
@@ -328,7 +414,6 @@ export async function submitAnswer(
     .single()
 
   if (player) {
-
     await supabase
       .from('players')
       .update({
@@ -345,15 +430,7 @@ export async function submitAnswer(
     throw new Error('Failed to create answer record')
   }
 
-  return {
-    id: data.id,
-    quizSessionId: data.quiz_session_id,
-    questionId: data.question_id,
-    playerId: data.player_id,
-    selectedAnswer: data.selected_answer,
-    isCorrect: data.is_correct,
-    answeredAt: new Date(data.answered_at),
-  }
+  return mapRowToAnswer(data)
 }
 
 /**
@@ -376,15 +453,7 @@ export async function getAnswersForQuestion(
     return []
   }
 
-  return (data || []).map((a: any) => ({
-    id: a.id,
-    quizSessionId: a.quiz_session_id,
-    questionId: a.question_id,
-    playerId: a.player_id,
-    selectedAnswer: a.selected_answer,
-    isCorrect: a.is_correct,
-    answeredAt: new Date(a.answered_at),
-  }))
+  return (data || []).map(mapRowToAnswer)
 }
 
 /**
@@ -409,15 +478,7 @@ export async function getPlayerAnswer(
     return null
   }
 
-  return {
-    id: data.id,
-    quizSessionId: data.quiz_session_id,
-    questionId: data.question_id,
-    playerId: data.player_id,
-    selectedAnswer: data.selected_answer,
-    isCorrect: data.is_correct,
-    answeredAt: new Date(data.answered_at),
-  }
+  return mapRowToAnswer(data)
 }
 
 /**
@@ -506,12 +567,10 @@ export async function getSessionScoreboard(
 
 /**
  * Cancel a quiz session and rollback all player stats
- * Works for both waiting sessions (no answers) and in-progress sessions (with answers)
  */
 export async function cancelQuizSession(sessionId: string): Promise<void> {
   const supabase = await createClient()
 
-  // 1. Get all answers for this session (may be empty if cancelled before quiz starts)
   const { data: answers, error: answersError } = await supabase
     .from('answers')
     .select('player_id, is_correct')
@@ -521,8 +580,6 @@ export async function cancelQuizSession(sessionId: string): Promise<void> {
     throw new Error(`Failed to fetch answers: ${answersError.message}`)
   }
 
-  // 2. Group answers by player and calculate rollback amounts
-  // If no answers exist (session cancelled before starting), this will be empty
   const playerRollbacks = new Map<string, { total: number; correct: number }>()
   
   answers?.forEach((answer) => {
@@ -534,7 +591,6 @@ export async function cancelQuizSession(sessionId: string): Promise<void> {
     playerRollbacks.set(answer.player_id, current)
   })
 
-  // 3. Rollback each player's stats (only if there are answers to rollback)
   for (const [playerId, rollback] of playerRollbacks.entries()) {
     const { data: player } = await supabase
       .from('players')
@@ -554,13 +610,10 @@ export async function cancelQuizSession(sessionId: string): Promise<void> {
 
       if (updateError) {
         console.error(`Failed to rollback stats for player ${playerId}:`, updateError)
-        // Continue with other players even if one fails
       }
     }
   }
 
-  // 4. Delete the session (cascades to answers and participants)
-  // This always happens, regardless of whether there were answers
   const { error: deleteError } = await supabase
     .from('quiz_sessions')
     .delete()

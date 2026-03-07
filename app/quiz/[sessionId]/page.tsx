@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -16,27 +16,9 @@ import {
 } from '@/components/ui/dialog'
 import { store } from '@/lib/store'
 import { useQuizTimer } from '@/hooks/use-quiz-timer'
-import type { QuizSession, Question, Answer, ScoreboardEntry } from '@/lib/types'
-import { Flag, ArrowRight, Check, X, Users, Trophy, Clock, Home, XCircle, Zap } from 'lucide-react'
-
-interface ShuffledAnswers {
-  answers: string[]
-  correctIndex: number
-}
-
-function shuffleAnswers(question: Question): ShuffledAnswers {
-  const answers = [
-    question.correctAnswer,
-    question.wrongAnswer1,
-    question.wrongAnswer2,
-    question.wrongAnswer3,
-  ]
-  const shuffled = [...answers].sort(() => Math.random() - 0.5)
-  return {
-    answers: shuffled,
-    correctIndex: shuffled.indexOf(question.correctAnswer),
-  }
-}
+import { QuestionRenderer } from '@/components/quiz/QuestionRenderer'
+import type { QuizSession, Question, Answer, ScoreboardEntry, SelectedAnswerData } from '@/lib/types'
+import { Flag, ArrowRight, Users, Trophy, Clock, Home, XCircle, Zap } from 'lucide-react'
 
 export default function QuizPage() {
   const params = useParams()
@@ -44,7 +26,6 @@ export default function QuizPage() {
   const router = useRouter()
   const [session, setSession] = useState<QuizSession | null>(null)
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null)
-  const [shuffledAnswers, setShuffledAnswers] = useState<ShuffledAnswers | null>(null)
   const [playerId, setPlayerId] = useState<string | null>(null)
   const [isHost, setIsHost] = useState(false)
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null)
@@ -64,14 +45,11 @@ export default function QuizPage() {
     questionIndex: session?.currentQuestionIndex ?? -1,
   })
 
-  // Use a ref to track displayed question index to avoid callback recreation
   const displayedQuestionIndexRef = useRef<number>(-1)
 
-  // Update UI from store cache (realtime updates the cache automatically)
   const updateFromStore = useCallback(async () => {
     const currentSession = store.getSessionById(sessionId)
     if (!currentSession) {
-      // Session was deleted (cancelled by host)
       router.push('/')
       return
     }
@@ -79,7 +57,6 @@ export default function QuizPage() {
     setSession(currentSession)
 
     if (currentSession.status === 'completed') {
-      // Load scoreboard only when completed
       store.getSessionScoreboard(sessionId).then(setSessionScoreboard).catch(console.error)
       return
     }
@@ -88,9 +65,6 @@ export default function QuizPage() {
     const questionId = currentSession.questionIds[questionIndex]
     const questionChanged = questionIndex !== displayedQuestionIndexRef.current
 
-    // Reset question-scoped UI state immediately when index changes.
-    // This avoids a transient frame where old answer counts can leak into
-    // the next question while the new question is being fetched.
     if (questionChanged) {
       setSelectedAnswer(null)
       setHasAnswered(false)
@@ -100,20 +74,16 @@ export default function QuizPage() {
 
     let question = store.getQuestionById(questionId)
 
-    // If question is not in cache, fetch it (this happens for non-host players)
     if (!question) {
       await store.refreshQuestion(questionId)
       question = store.getQuestionById(questionId)
     }
 
-    // Update question UI if the question index changed
     if (question && questionChanged) {
       setCurrentQuestion(question)
-      setShuffledAnswers(shuffleAnswers(question))
       setIsFlagged(question.flagged)
     }
 
-    // Update answers from cache (for current question)
     if (question) {
       setAnswers(store.getAnswersForQuestion(sessionId, questionId))
     }
@@ -148,7 +118,6 @@ export default function QuizPage() {
       setSession(currentSession)
       setIsHost(currentSession.hostPlayerId === storedPlayerId)
       
-      // Refresh participants
       await store.refreshParticipants(sessionId)
       if (!isMounted) return
       setParticipantCount(store.getParticipants(sessionId).length)
@@ -156,7 +125,6 @@ export default function QuizPage() {
       const questionId = currentSession.questionIds[currentSession.currentQuestionIndex]
       let question = store.getQuestionById(questionId)
       
-      // If question not in cache, fetch it
       if (!question) {
         await store.refreshQuestion(questionId)
         question = store.getQuestionById(questionId)
@@ -166,11 +134,9 @@ export default function QuizPage() {
 
       if (question) {
         setCurrentQuestion(question)
-        setShuffledAnswers(shuffleAnswers(question))
         setIsFlagged(question.flagged)
         displayedQuestionIndexRef.current = currentSession.currentQuestionIndex
 
-        // Check if player has already answered
         let existingAnswer = store.getPlayerAnswer(sessionId, questionId, storedPlayerId)
         if (!existingAnswer) {
           existingAnswer = await store.refreshPlayerAnswer(sessionId, questionId, storedPlayerId) || undefined
@@ -181,7 +147,6 @@ export default function QuizPage() {
           setHasAnswered(true)
         }
         
-        // Load initial answers for this question
         await store.refreshAnswersForQuestion(sessionId, questionId)
         if (!isMounted) return
         setAnswers(store.getAnswersForQuestion(sessionId, questionId))
@@ -190,11 +155,7 @@ export default function QuizPage() {
 
     loadQuiz()
 
-    // Subscribe to realtime updates for this session
-    // Realtime will update the store cache, then we update UI
     const unsubscribeRealtime = store.subscribeToSession(sessionId)
-    
-    // Subscribe to store updates to sync UI when cache changes
     const unsubscribeStore = store.subscribe(updateFromStore)
 
     return () => {
@@ -204,7 +165,7 @@ export default function QuizPage() {
     }
   }, [sessionId, router, updateFromStore])
 
-  const handleSelectAnswer = async (answer: string) => {
+  const handleAnswer = async (answer: string, answerData?: SelectedAnswerData) => {
     if (hasAnswered || showResults || !currentQuestion || !playerId) return
 
     setSelectedAnswer(answer)
@@ -216,9 +177,9 @@ export default function QuizPage() {
         currentQuestion.id,
         playerId,
         answer,
-        currentQuestion.correctAnswer
+        undefined,
+        answerData
       )
-      // Refresh answers to show updated distribution
       await store.refreshAnswersForQuestion(sessionId, currentQuestion.id)
       setAnswers(store.getAnswersForQuestion(sessionId, currentQuestion.id))
     } catch (error) {
@@ -261,17 +222,7 @@ export default function QuizPage() {
     }
   }
 
-  // Calculate answer distribution
-  const answerDistribution = useMemo(() => {
-    if (!shuffledAnswers) return []
-    return shuffledAnswers.answers.map((answer) => {
-      const count = answers.filter((a) => a.selectedAnswer === answer).length
-      const percentage = answers.length > 0 ? (count / answers.length) * 100 : 0
-      return { answer, count, percentage }
-    })
-  }, [shuffledAnswers, answers])
-
-  if (!session || !currentQuestion || !shuffledAnswers) {
+  if (!session || !currentQuestion) {
     return (
       <main className="min-h-screen bg-background flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -279,7 +230,6 @@ export default function QuizPage() {
     )
   }
 
-  // Quiz completed screen
   if (session.status === 'completed') {
     const playerStats = sessionScoreboard.find((s) => {
       const player = store.getPlayerById(playerId || '')
@@ -305,7 +255,6 @@ export default function QuizPage() {
                 </p>
               )}
 
-              {/* Session Scoreboard */}
               <div className="mt-8 text-left">
                 <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
                   <Trophy className="w-5 h-5 text-accent" />
@@ -424,76 +373,28 @@ export default function QuizPage() {
         {/* Question Card */}
         <Card className="border-border/50 mb-6">
           <CardContent className="pt-8 pb-6">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              {currentQuestion.questionType !== 'multiple_choice' && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium uppercase tracking-wide">
+                  {currentQuestion.questionType.replace('_', ' ')}
+                </span>
+              )}
+            </div>
             <p className="text-xl font-medium text-foreground text-center text-balance">
               {currentQuestion.questionText}
             </p>
           </CardContent>
         </Card>
 
-        {/* Answer Options */}
-        <div className="grid gap-3 mb-6">
-          {shuffledAnswers.answers.map((answer, index) => {
-            const isCorrect = answer === currentQuestion.correctAnswer
-            const isSelected = selectedAnswer === answer
-            const dist = answerDistribution[index]
-
-            let buttonClass = 'p-4 text-left rounded-lg border transition-all relative overflow-hidden '
-
-            if (showResults) {
-              if (isCorrect) {
-                buttonClass += 'border-success bg-success/10 '
-              } else if (isSelected) {
-                buttonClass += 'border-destructive bg-destructive/10 '
-              } else {
-                buttonClass += 'border-border/50 bg-secondary/30 opacity-60 '
-              }
-            } else if (isSelected) {
-              buttonClass += 'border-primary bg-primary/10 '
-            } else if (hasAnswered) {
-              buttonClass += 'border-border/50 bg-secondary/30 opacity-60 cursor-not-allowed '
-            } else {
-              buttonClass += 'border-border/50 bg-card hover:border-primary/50 hover:bg-secondary/50 cursor-pointer '
-            }
-
-            return (
-              <button
-                key={answer}
-                type="button"
-                onClick={() => handleSelectAnswer(answer)}
-                disabled={hasAnswered || showResults}
-                className={buttonClass}
-              >
-                {showResults && (
-                  <div
-                    className={`absolute inset-y-0 left-0 transition-all ${
-                      isCorrect ? 'bg-success/20' : 'bg-secondary/30'
-                    }`}
-                    style={{ width: `${dist?.percentage || 0}%` }}
-                  />
-                )}
-                <div className="relative flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    {showResults && (
-                      isCorrect ? (
-                        <Check className="w-5 h-5 text-success shrink-0" />
-                      ) : isSelected ? (
-                        <X className="w-5 h-5 text-destructive shrink-0" />
-                      ) : null
-                    )}
-                    <span className={`font-medium ${showResults && isCorrect ? 'text-success' : showResults && isSelected ? 'text-destructive' : 'text-foreground'}`}>
-                      {answer}
-                    </span>
-                  </div>
-                  {showResults && (
-                    <span className="text-sm text-muted-foreground">
-                      {dist?.count || 0} ({(dist?.percentage || 0).toFixed(0)}%)
-                    </span>
-                  )}
-                </div>
-              </button>
-            )
-          })}
-        </div>
+        {/* Question Type Renderer */}
+        <QuestionRenderer
+          question={currentQuestion}
+          selectedAnswer={selectedAnswer}
+          hasAnswered={hasAnswered}
+          showResults={showResults}
+          answers={answers}
+          onAnswer={handleAnswer}
+        />
 
         {/* Status / Controls */}
         {hasAnswered && !showResults && (

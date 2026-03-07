@@ -6,18 +6,45 @@ export interface Player {
   createdAt: Date
 }
 
+export type QuestionType = 'multiple_choice' | 'true_false' | 'multiple_answer' | 'sequence'
+
+export interface QuestionOption {
+  text: string
+  isCorrect: boolean
+}
+
+export interface SequenceItem {
+  text: string
+  correctPosition: number
+}
+
+export type QuestionStructure =
+  | { options: QuestionOption[] }
+  | { items: SequenceItem[] }
+
 export interface Question {
   id: string
   questionText: string
+  questionType: QuestionType
+  questionStructure: QuestionStructure
+  /** @deprecated Use questionStructure.options instead */
   correctAnswer: string
+  /** @deprecated Use questionStructure.options instead */
   wrongAnswer1: string
+  /** @deprecated Use questionStructure.options instead */
   wrongAnswer2: string
+  /** @deprecated Use questionStructure.options instead */
   wrongAnswer3: string
   tags: string[]
   flagged: boolean
   flagReason?: string
   createdAt: Date
 }
+
+export type SelectedAnswerData =
+  | { type: 'single'; value: string }
+  | { type: 'multiple'; values: string[] }
+  | { type: 'sequence'; order: string[] }
 
 export interface QuizSession {
   id: string
@@ -45,6 +72,7 @@ export interface Answer {
   questionId: string
   playerId: string
   selectedAnswer: string
+  selectedAnswerData?: SelectedAnswerData
   isCorrect: boolean
   answeredAt: Date
 }
@@ -55,4 +83,21 @@ export interface ScoreboardEntry {
   totalQuestionsAnswered: number
   totalCorrectAnswers: number
   accuracy: number
+}
+
+// ---- Helpers ----
+
+export function getCorrectAnswerText(question: Question): string {
+  if (question.questionType === 'sequence') return ''
+  const structure = question.questionStructure as { options: QuestionOption[] }
+  return structure.options.find((o) => o.isCorrect)?.text ?? question.correctAnswer
+}
+
+export function getOptionTexts(question: Question): string[] {
+  if (question.questionType === 'sequence') {
+    const structure = question.questionStructure as { items: SequenceItem[] }
+    return structure.items.map((i) => i.text)
+  }
+  const structure = question.questionStructure as { options: QuestionOption[] }
+  return structure.options.map((o) => o.text)
 }

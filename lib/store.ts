@@ -1,6 +1,6 @@
 'use client'
 
-import type { Player, Question, QuizSession, QuizParticipant, Answer, ScoreboardEntry } from './types'
+import type { Player, Question, QuizSession, QuizParticipant, Answer, ScoreboardEntry, SelectedAnswerData } from './types'
 import { generateUUID } from './utils'
 import * as playerActions from '@/actions/players'
 import * as questionActions from '@/actions/questions'
@@ -92,6 +92,8 @@ class QuizStore {
   async addQuestion(question: Omit<Question, 'id' | 'createdAt' | 'flagged'>): Promise<Question> {
     const newQuestion = await questionActions.submitQuestion({
       questionText: question.questionText,
+      questionType: question.questionType,
+      questionStructure: question.questionStructure,
       correctAnswer: question.correctAnswer,
       wrongAnswer1: question.wrongAnswer1,
       wrongAnswer2: question.wrongAnswer2,
@@ -276,14 +278,16 @@ class QuizStore {
     questionId: string,
     playerId: string,
     selectedAnswer: string,
-    correctAnswer: string
+    _correctAnswer?: string,
+    selectedAnswerData?: SelectedAnswerData
   ): Promise<Answer> {
     const answer = await quizActions.submitAnswer(
       sessionId,
       questionId,
       playerId,
       selectedAnswer,
-      correctAnswer
+      undefined,
+      selectedAnswerData
     )
     this.answers.set(answer.id, answer)
     this.updatePlayerStats(playerId, answer.isCorrect)
@@ -455,6 +459,7 @@ class QuizStore {
               questionId: answerData.question_id,
               playerId: answerData.player_id,
               selectedAnswer: answerData.selected_answer,
+              selectedAnswerData: answerData.selected_answer_data || undefined,
               isCorrect: answerData.is_correct,
               answeredAt: new Date(answerData.answered_at),
             }
