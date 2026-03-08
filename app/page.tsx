@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { store } from '@/lib/store'
 import { getQuestionCount } from '@/actions/questions'
+import { validatePlayer } from '@/actions/players'
 import { Users, PlusCircle, Trophy, Play, Zap } from 'lucide-react'
 
 export default function HomePage() {
@@ -21,10 +22,16 @@ export default function HomePage() {
     const storedAlias = localStorage.getItem('quiz_alias')
     const storedPlayerId = localStorage.getItem('quiz_player_id')
     if (storedAlias && storedPlayerId) {
-      setAlias(storedAlias)
+      validatePlayer(storedPlayerId).then((exists) => {
+        if (exists) {
+          setAlias(storedAlias)
+        } else {
+          localStorage.removeItem('quiz_player_id')
+          localStorage.removeItem('quiz_alias')
+        }
+      })
     }
-    
-    // Fetch question count from server
+
     getQuestionCount().then(setQuestionCount)
   }, [])
 

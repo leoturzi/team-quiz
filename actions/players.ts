@@ -4,6 +4,28 @@ import { createClient } from '@/lib/supabase/server'
 import type { Player } from '@/lib/types'
 
 /**
+ * Check if a player still exists in the database.
+ * Returns true on network/Supabase errors to avoid logging out valid users.
+ */
+export async function validatePlayer(playerId: string): Promise<boolean> {
+  try {
+    const supabase = await createClient()
+    const { data, error } = await supabase
+      .from('players')
+      .select('id')
+      .eq('id', playerId)
+      .single()
+
+    if (error && error.code === 'PGRST116') return false
+    if (error) return true
+
+    return !!data
+  } catch {
+    return true
+  }
+}
+
+/**
  * Check if an alias is available
  */
 export async function checkAliasAvailable(alias: string): Promise<boolean> {
