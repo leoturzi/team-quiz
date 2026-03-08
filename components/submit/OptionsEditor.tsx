@@ -56,6 +56,39 @@ export function OptionsEditor({ questionType, options, onChange }: OptionsEditor
   const canAdd = options.length < config.max
   const canRemove = options.length > config.min
 
+  if (questionType === 'true_false') {
+    return (
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-foreground">
+          Select the correct answer <span className="text-destructive">*</span>
+        </label>
+        <div className="space-y-3">
+          {options.map((opt, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => toggleCorrect(idx)}
+              className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-all text-left ${
+                opt.isCorrect
+                  ? 'border-success bg-success/10 text-success font-medium'
+                  : 'border-border/50 bg-card hover:border-primary/50 text-foreground'
+              }`}
+            >
+              <span className={`shrink-0 w-6 h-6 rounded flex items-center justify-center border ${
+                opt.isCorrect
+                  ? 'border-success bg-success/20 text-success'
+                  : 'border-border/50 text-muted-foreground'
+              }`}>
+                {opt.isCorrect ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
+              </span>
+              {opt.text}
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   if (config.singleCorrect) {
     const correctIdx = options.findIndex((o) => o.isCorrect)
     const correctOption = options[correctIdx] ?? options[0]

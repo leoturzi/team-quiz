@@ -24,8 +24,8 @@ const DEFAULT_OPTIONS: Record<Exclude<QuestionType, 'sequence'>, OptionEntry[]> 
     { text: '', isCorrect: false },
   ],
   true_false: [
-    { text: '', isCorrect: true },
-    { text: '', isCorrect: false },
+    { text: 'True', isCorrect: true },
+    { text: 'False', isCorrect: false },
   ],
   multiple_answer: [
     { text: '', isCorrect: true },
@@ -60,6 +60,10 @@ export function QuestionForm({ existingTags, isSubmitting, onSubmit }: QuestionF
   const handleTypeChange = (type: QuestionType) => {
     setQuestionType(type)
     if (type === 'sequence') return
+    if (type === 'true_false') {
+      setOptions(DEFAULT_OPTIONS.true_false)
+      return
+    }
     setOptions(DEFAULT_OPTIONS[type].map((d, i) => {
       const existing = options[i]
       if (!existing) return d
