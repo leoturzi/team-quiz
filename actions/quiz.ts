@@ -136,6 +136,7 @@ export async function createQuizSession(hostPlayerId: string): Promise<QuizSessi
     createdAt: new Date(data.created_at),
     startedAt: data.started_at ? new Date(data.started_at) : undefined,
     endedAt: data.ended_at ? new Date(data.ended_at) : undefined,
+    currentQuestionStartedAt: data.current_question_started_at ? new Date(data.current_question_started_at) : undefined,
   }
 }
 
@@ -165,6 +166,7 @@ export async function getSessionByCode(code: string): Promise<QuizSession | null
     createdAt: new Date(data.created_at),
     startedAt: data.started_at ? new Date(data.started_at) : undefined,
     endedAt: data.ended_at ? new Date(data.ended_at) : undefined,
+    currentQuestionStartedAt: data.current_question_started_at ? new Date(data.current_question_started_at) : undefined,
   }
 }
 
@@ -194,6 +196,7 @@ export async function getSessionById(id: string): Promise<QuizSession | null> {
     createdAt: new Date(data.created_at),
     startedAt: data.started_at ? new Date(data.started_at) : undefined,
     endedAt: data.ended_at ? new Date(data.ended_at) : undefined,
+    currentQuestionStartedAt: data.current_question_started_at ? new Date(data.current_question_started_at) : undefined,
   }
 }
 
@@ -302,13 +305,15 @@ export async function startQuiz(
 ): Promise<void> {
   const supabase = await createClient()
 
+  const now = new Date().toISOString()
   const { error } = await supabase
     .from('quiz_sessions')
     .update({
       status: 'in_progress' as const,
       question_ids: questionIds,
       current_question_index: 0,
-      started_at: new Date().toISOString(),
+      started_at: now,
+      current_question_started_at: now,
     })
     .eq('id', sessionId)
 
@@ -337,12 +342,14 @@ export async function nextQuestion(sessionId: string): Promise<void> {
   const questionIds = session.question_ids || []
   const isComplete = nextIndex >= questionIds.length
 
+  const now = new Date().toISOString()
   const { error } = await supabase
     .from('quiz_sessions')
     .update({
       current_question_index: nextIndex,
       status: (isComplete ? 'completed' : 'in_progress') as 'completed' | 'in_progress',
-      ended_at: isComplete ? new Date().toISOString() : null,
+      ended_at: isComplete ? now : null,
+      current_question_started_at: isComplete ? null : now,
     })
     .eq('id', sessionId)
 

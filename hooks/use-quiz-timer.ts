@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import type { Question } from '@/lib/types'
 
-const QUESTION_DURATION_SECONDS = 60
+export const QUESTION_DURATION_SECONDS = 60
 const TIME_BOMB_PENALTY_SECONDS = 5
 const TIME_BOMB_THRESHOLD_RATIO = 0.25
 const TIME_BOMB_VISUAL_MS = 1800
@@ -12,6 +12,7 @@ interface UseQuizTimerParams {
   answerCount: number
   participantCount: number
   questionIndex: number
+  currentQuestionStartedAt?: Date | null
 }
 
 interface UseQuizTimerReturn {
@@ -22,14 +23,21 @@ interface UseQuizTimerReturn {
   timeBombPulse: number
 }
 
+function computeRemainingSeconds(startedAt?: Date | null): number {
+  if (!startedAt) return QUESTION_DURATION_SECONDS
+  const elapsed = Math.floor((Date.now() - startedAt.getTime()) / 1000)
+  return Math.max(0, QUESTION_DURATION_SECONDS - elapsed)
+}
+
 export function useQuizTimer({
   currentQuestion,
   answerCount,
   participantCount,
   questionIndex,
+  currentQuestionStartedAt,
 }: UseQuizTimerParams): UseQuizTimerReturn {
-  const [timeLeft, setTimeLeft] = useState(QUESTION_DURATION_SECONDS)
-  const [showResults, setShowResults] = useState(false)
+  const [timeLeft, setTimeLeft] = useState(() => computeRemainingSeconds(currentQuestionStartedAt))
+  const [showResults, setShowResults] = useState(() => computeRemainingSeconds(currentQuestionStartedAt) <= 0)
   const [timeBombFlash, setTimeBombFlash] = useState(false)
   const [timeBombPulse, setTimeBombPulse] = useState(0)
 
@@ -42,8 +50,9 @@ export function useQuizTimer({
   // stale showResults=true is never committed to the DOM.
   if (questionIndex !== prevQuestionIndex) {
     setPrevQuestionIndex(questionIndex)
-    setTimeLeft(QUESTION_DURATION_SECONDS)
-    setShowResults(false)
+    const remaining = computeRemainingSeconds(currentQuestionStartedAt)
+    setTimeLeft(remaining)
+    setShowResults(remaining <= 0)
     setTimeBombFlash(false)
     setTimeBombPulse(0)
     if (bombVisualTimeoutRef.current) {

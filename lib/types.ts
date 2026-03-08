@@ -48,6 +48,7 @@ export interface QuizSession {
   createdAt: Date
   startedAt?: Date
   endedAt?: Date
+  currentQuestionStartedAt?: Date
 }
 
 export interface QuizParticipant {

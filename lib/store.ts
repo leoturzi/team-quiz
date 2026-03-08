@@ -199,10 +199,12 @@ class QuizStore {
     await quizActions.startQuiz(sessionId, questionIds)
     const session = this.sessions.get(sessionId)
     if (session) {
+      const now = new Date()
       session.status = 'in_progress'
       session.questionIds = questionIds
-      session.startedAt = new Date()
+      session.startedAt = now
       session.currentQuestionIndex = 0
+      session.currentQuestionStartedAt = now
       this.notify()
     } else {
       await this.refreshSession(sessionId)
@@ -400,6 +402,7 @@ class QuizStore {
               createdAt: new Date(sessionData.created_at),
               startedAt: sessionData.started_at ? new Date(sessionData.started_at) : undefined,
               endedAt: sessionData.ended_at ? new Date(sessionData.ended_at) : undefined,
+              currentQuestionStartedAt: sessionData.current_question_started_at ? new Date(sessionData.current_question_started_at) : undefined,
             }
             this.sessions.set(session.id, session)
             this.notify()

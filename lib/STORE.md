@@ -158,6 +158,26 @@ updatePlayerStats(playerId: string, correct: boolean) {
 
 ## Realtime Integration
 
+### Per-Question Timer Persistence
+
+The quiz timer is anchored to a server-side timestamp so it survives page reloads:
+
+```
+quiz_sessions.current_question_started_at  (TIMESTAMPTZ)
+```
+
+**Write path:** Set to `NOW()` by `startQuiz` (for Q1) and `nextQuestion` (for subsequent questions). Cleared to `null` when the session completes.
+
+**Read path:** Returned by `getSessionById` / `getSessionByCode` as `currentQuestionStartedAt: Date`. Also mapped in the Realtime handler so non-host clients receive it immediately.
+
+**Timer hook:** `useQuizTimer` receives `currentQuestionStartedAt` and computes:
+
+```typescript
+remainingSeconds = max(0, 60 - floor((Date.now() - startedAt) / 1000))
+```
+
+If `remainingSeconds <= 0` on mount (e.g. user was away too long), results are shown immediately.
+
 ### How It Works
 
 The store uses Supabase Realtime's `postgres_changes` feature to receive live database updates:
@@ -378,8 +398,8 @@ useEffect(() => {
 | `getSessionById(id)` | Get session from cache |
 | `getSessionByCode(code)` | Find session by lobby code |
 | `refreshSession(id)` | Fetch session from server |
-| `startSession(id, questionIds)` | Start the quiz |
-| `nextQuestion(id)` | Advance to next question |
+| `startSession(id, questionIds)` | Start the quiz (sets `currentQuestionStartedAt`) |
+| `nextQuestion(id)` | Advance to next question (resets `currentQuestionStartedAt`) |
 
 ### Participant Methods
 
