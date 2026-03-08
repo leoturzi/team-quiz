@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { store } from '@/lib/store'
+import { validatePlayer } from '@/actions/players'
 import { QuestionForm, type QuestionFormData } from '@/components/submit/QuestionForm'
 import { ArrowLeft, PlusCircle, Check } from 'lucide-react'
 
@@ -21,6 +22,13 @@ export default function SubmitPage() {
     const loadData = async () => {
       const storedPlayerId = localStorage.getItem('quiz_player_id')
       if (!storedPlayerId) {
+        router.push('/register?redirect=submit')
+        return
+      }
+      const playerExists = await validatePlayer(storedPlayerId)
+      if (!playerExists) {
+        localStorage.removeItem('quiz_player_id')
+        localStorage.removeItem('quiz_alias')
         router.push('/register?redirect=submit')
         return
       }

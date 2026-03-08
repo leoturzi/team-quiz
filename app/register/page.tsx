@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { store } from '@/lib/store'
+import { validatePlayer } from '@/actions/players'
 import { ArrowLeft, Check, X, User } from 'lucide-react'
 
 function RegisterContent() {
@@ -19,16 +20,26 @@ function RegisterContent() {
   const [isAvailable, setIsAvailable] = useState<boolean | null>(null)
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isValidating, setIsValidating] = useState(true)
 
   const redirect = searchParams.get('redirect')
   const code = searchParams.get('code')
 
   useEffect(() => {
-    // Check if already registered
     const storedAlias = localStorage.getItem('quiz_alias')
     const storedPlayerId = localStorage.getItem('quiz_player_id')
     if (storedAlias && storedPlayerId) {
-      handleRedirect()
+      validatePlayer(storedPlayerId).then((exists) => {
+        if (exists) {
+          handleRedirect()
+        } else {
+          localStorage.removeItem('quiz_player_id')
+          localStorage.removeItem('quiz_alias')
+          setIsValidating(false)
+        }
+      })
+    } else {
+      setIsValidating(false)
     }
   }, [])
 
@@ -104,6 +115,14 @@ function RegisterContent() {
       setError('Failed to register. Please try again.')
       setIsSubmitting(false)
     }
+  }
+
+  if (isValidating) {
+    return (
+      <main className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </main>
+    )
   }
 
   return (
