@@ -1,17 +1,28 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import type { Question } from '@/lib/types'
+import type { Question, QuestionType, QuestionStructure } from '@/lib/types'
+
+function mapRowToQuestion(q: any): Question {
+  return {
+    id: q.id,
+    questionText: q.question_text,
+    questionType: q.question_type || 'multiple_choice',
+    questionStructure: q.question_structure,
+    tags: q.tags || [],
+    flagged: q.flagged || false,
+    flagReason: q.flag_reason || undefined,
+    createdAt: new Date(q.created_at),
+  }
+}
 
 /**
- * Submit a new question
+ * Submit a new question (supports all question types)
  */
 export async function submitQuestion(data: {
   questionText: string
-  correctAnswer: string
-  wrongAnswer1: string
-  wrongAnswer2: string
-  wrongAnswer3: string
+  questionType?: QuestionType
+  questionStructure: QuestionStructure
   tags?: string[]
 }): Promise<Question> {
   const supabase = await createClient()
@@ -20,10 +31,8 @@ export async function submitQuestion(data: {
     .from('questions')
     .insert({
       question_text: data.questionText,
-      correct_answer: data.correctAnswer,
-      wrong_answer_1: data.wrongAnswer1,
-      wrong_answer_2: data.wrongAnswer2,
-      wrong_answer_3: data.wrongAnswer3,
+      question_type: data.questionType || 'multiple_choice',
+      question_structure: data.questionStructure,
       tags: data.tags || [],
       flagged: false,
     })
@@ -34,18 +43,7 @@ export async function submitQuestion(data: {
     throw new Error(`Failed to submit question: ${error?.message || 'Unknown error'}`)
   }
 
-  return {
-    id: question.id,
-    questionText: question.question_text,
-    correctAnswer: question.correct_answer,
-    wrongAnswer1: question.wrong_answer_1,
-    wrongAnswer2: question.wrong_answer_2,
-    wrongAnswer3: question.wrong_answer_3,
-    tags: question.tags,
-    flagged: question.flagged,
-    flagReason: question.flag_reason || undefined,
-    createdAt: new Date(question.created_at),
-  }
+  return mapRowToQuestion(question)
 }
 
 /**
@@ -95,22 +93,10 @@ export async function getRandomQuestions(
     return []
   }
 
-  // Shuffle and take count
   const shuffled = [...(data || [])].sort(() => Math.random() - 0.5)
   const selected = shuffled.slice(0, Math.min(count, shuffled.length))
 
-  return selected.map((q: any) => ({
-    id: q.id,
-    questionText: q.question_text,
-    correctAnswer: q.correct_answer,
-    wrongAnswer1: q.wrong_answer_1,
-    wrongAnswer2: q.wrong_answer_2,
-    wrongAnswer3: q.wrong_answer_3,
-    tags: q.tags || [],
-    flagged: q.flagged || false,
-    flagReason: q.flag_reason || undefined,
-    createdAt: new Date(q.created_at),
-  }))
+  return selected.map(mapRowToQuestion)
 }
 
 /**
@@ -129,18 +115,7 @@ export async function getQuestionById(id: string): Promise<Question | null> {
     return null
   }
 
-  return {
-    id: data.id,
-    questionText: data.question_text,
-    correctAnswer: data.correct_answer,
-    wrongAnswer1: data.wrong_answer_1,
-    wrongAnswer2: data.wrong_answer_2,
-    wrongAnswer3: data.wrong_answer_3,
-    tags: data.tags,
-    flagged: data.flagged,
-    flagReason: data.flag_reason || undefined,
-    createdAt: new Date(data.created_at),
-  }
+  return mapRowToQuestion(data)
 }
 
 /**

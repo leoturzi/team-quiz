@@ -50,7 +50,8 @@ A quiz game where:
    - Persistent storage in localStorage
 
 2. **Question Submission**
-   - Submit questions with 1 correct + 3 wrong answers
+   - Multiple question types: Multiple Choice, True/False, Multiple Answer (checkboxes), and Sequence (drag-and-drop ordering)
+   - Dynamic submission form that adapts fields based on selected question type
    - Optional tag system for categorization
    - Immediate availability in question pool
 
@@ -64,7 +65,8 @@ A quiz game where:
 4. **Quiz Gameplay**
    - 10 questions per session (configurable)
    - 60-second timer per question (or until all answer)
-   - Shuffled answer options
+   - Dynamic question rendering based on type (buttons, checkboxes, drag-and-drop)
+   - Server-side answer evaluation (clients never receive the answer key)
    - Real-time answer tracking
    - Answer distribution visualization
    - Question flagging system
@@ -109,10 +111,20 @@ gdp-quiz-game/
 │   │   ├── textarea.tsx
 │   │   ├── progress.tsx
 │   │   └── ...                  # 50+ UI components
+│   ├── quiz/                    # Question type renderers (gameplay)
+│   │   ├── QuestionRenderer.tsx          # Factory — switches on question_type
+│   │   ├── MultipleChoiceRenderer.tsx    # MC + True/False (shuffled buttons)
+│   │   ├── MultipleAnswerRenderer.tsx    # Checkboxes with lock-in
+│   │   └── SequenceRenderer.tsx          # Drag-and-drop ordering (@dnd-kit)
+│   ├── submit/                  # Question submission form components
+│   │   ├── QuestionForm.tsx              # Full form (type selector, answers, tags)
+│   │   ├── OptionsEditor.tsx             # Shared editor for MC, T/F, Multi-Answer
+│   │   └── SequenceEditor.tsx            # Ordered items editor for Sequence type
 │   └── theme-provider.tsx       # Theme configuration
 │
 ├── hooks/                       # Custom React hooks
 │   ├── use-mobile.ts
+│   ├── use-quiz-timer.ts        # Timer countdown, time bomb, auto-results
 │   └── use-toast.ts
 │
 ├── lib/
@@ -135,6 +147,9 @@ gdp-quiz-game/
 │   ├── 003_create_quiz_sessions_table.sql
 │   ├── 004_create_quiz_participants_table.sql
 │   ├── 005_create_answers_table.sql
+│   ├── 006_enable_realtime_filters.sql
+│   ├── 007_add_cascade_deletes.sql
+│   ├── 008_upgrade_questions_structure.sql
 │   └── README.md
 │
 ├── public/                      # Static assets
@@ -177,7 +192,7 @@ gdp-quiz-game/
      NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
      NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
      ```
-   - Run migrations in order (see `migrations/README.md`)
+   - Run migrations in order — see `migrations/README.md` (001 through 008)
 
 4. **Run the development server**
    ```bash
@@ -214,7 +229,8 @@ npm start
 
 3. **Submit Questions**
    - Navigate to "Submit a Question"
-   - Fill in question text, correct answer, and 3 wrong answers
+   - Select a question type (Multiple Choice, True/False, Multiple Answer, or Sequence)
+   - Fill in the question text and type-specific options
    - Add optional tags for categorization
    - Submit to add to the question pool
 
@@ -246,7 +262,7 @@ The database schema is defined in migration files located in `/migrations`. See 
 ### Tables
 
 - **`players`** - Stores player aliases and cumulative scores
-- **`questions`** - Stores all submitted questions and answers
+- **`questions`** - Stores all submitted questions with `question_type` and `question_structure` (JSONB)
 - **`quiz_sessions`** - Stores quiz session metadata
 - **`quiz_participants`** - Tracks players in each session
 - **`answers`** - Records player answers to questions
@@ -284,9 +300,12 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 - Redirects to intended destination after registration
 
 ### 3. Question Submission Screen (`/submit`)
-- Form with question text (textarea)
-- Correct answer input
-- Three wrong answer inputs
+- Question type selector (Multiple Choice, True/False, Multiple Answer, Sequence)
+- Dynamic form that adapts to the selected type:
+  - **Multiple Choice**: 1 correct + 3 wrong answer inputs
+  - **True/False**: 1 correct + 1 wrong answer input
+  - **Multiple Answer**: Configurable options with correct/incorrect toggles
+  - **Sequence**: Ordered items list (correct order = the order entered)
 - Tags input (comma-separated)
 - Success confirmation with option to submit another
 
@@ -300,8 +319,11 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 ### 5. Quiz Game Screen (`/quiz/[sessionId]`)
 - Question display with progress indicator
-- Four answer options (shuffled)
-- 60-second countdown timer
+- Dynamic rendering based on question type:
+  - **Multiple Choice / True/False**: Shuffled option buttons
+  - **Multiple Answer**: Checkbox selection with lock-in
+  - **Sequence**: Drag-and-drop ordering
+- 60-second countdown timer with time bomb mechanic
 - Answer tracking (X/Y participants answered)
 - Results phase:
   - Correct answer highlighted
@@ -369,10 +391,14 @@ To fully migrate from in-memory store to Supabase:
 
 All types are defined in `lib/types.ts`:
 - `Player`
-- `Question`
+- `Question` (with `questionType` and `questionStructure`)
+- `QuestionType` (`'multiple_choice' | 'true_false' | 'multiple_answer' | 'sequence'`)
+- `QuestionStructure` (discriminated union: `{ options }` or `{ items }`)
+- `QuestionOption`, `SequenceItem`
+- `SelectedAnswerData` (discriminated union for single, multiple, or sequence responses)
 - `QuizSession`
 - `QuizParticipant`
-- `Answer`
+- `Answer` (with optional `selectedAnswerData` for structured responses)
 - `ScoreboardEntry`
 
 ## Future Enhancements

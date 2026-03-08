@@ -55,6 +55,10 @@ ALTER TABLE quiz_sessions REPLICA IDENTITY FULL;
 ALTER TABLE quiz_participants REPLICA IDENTITY FULL;
 ALTER TABLE answers REPLICA IDENTITY FULL;
 
+ALTER PUBLICATION supabase_realtime ADD TABLE quiz_sessions;
+ALTER PUBLICATION supabase_realtime ADD TABLE quiz_participants;
+ALTER PUBLICATION supabase_realtime ADD TABLE answers;
+
 -- Revert migration (uncomment to run)
 -- DROP POLICY IF EXISTS "Allow anonymous read access on quiz_sessions" ON quiz_sessions;
 -- DROP POLICY IF EXISTS "Allow anonymous read access on quiz_participants" ON quiz_participants;
@@ -67,3 +71,6 @@ ALTER TABLE answers REPLICA IDENTITY FULL;
 -- ALTER TABLE quiz_sessions DISABLE ROW LEVEL SECURITY;
 -- ALTER TABLE quiz_participants DISABLE ROW LEVEL SECURITY;
 -- ALTER TABLE answers DISABLE ROW LEVEL SECURITY;
+-- ALTER PUBLICATION supabase_realtime DROP TABLE quiz_sessions;
+-- ALTER PUBLICATION supabase_realtime DROP TABLE quiz_participants;
+-- ALTER PUBLICATION supabase_realtime DROP TABLE answers;

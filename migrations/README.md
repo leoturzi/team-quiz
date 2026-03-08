@@ -12,6 +12,8 @@ Each migration file follows the naming convention: `XXX_description.sql`
 - `004_create_quiz_participants_table.sql` - Creates the quiz_participants table
 - `005_create_answers_table.sql` - Creates the answers table
 - `006_enable_realtime_filters.sql` - Enables RLS with policies for Realtime to work
+- `007_add_cascade_deletes.sql` - Adds cascade delete constraints for session cleanup
+- `008_upgrade_questions_structure.sql` - Adds `question_type` and `question_structure` (JSONB) columns, backfills existing questions, drops legacy flat answer columns, and adds `selected_answer_data` (JSONB) to answers
 
 ## Structure
 
@@ -56,6 +58,8 @@ Migrations should be applied in numerical order:
 4. `004_create_quiz_participants_table.sql` (depends on quiz_sessions and players)
 5. `005_create_answers_table.sql` (depends on quiz_sessions, questions, and players)
 6. `006_enable_realtime_filters.sql` (enables RLS policies for Realtime)
+7. `007_add_cascade_deletes.sql` (adds cascade constraints to existing FKs)
+8. `008_upgrade_questions_structure.sql` (adds question_type, question_structure; drops legacy columns)
 
 ## Enabling Realtime
 

@@ -16,11 +16,11 @@ Player registration and stats management.
 
 ## questions.ts
 
-Question CRUD and querying.
+Question CRUD and querying. Supports multiple question types: `multiple_choice`, `true_false`, `multiple_answer`, and `sequence`.
 
 | Function | Description |
 |---|---|
-| `submitQuestion(data)` | Inserts a new question with its correct answer, three wrong answers, and optional tags. |
+| `submitQuestion(data)` | Inserts a new question with a `questionType` and `questionStructure` (JSONB payload defining options or sequence items), plus optional tags. |
 | `getAllTags()` | Aggregates all unique tags across every question. |
 | `getRandomQuestions(count, tags?)` | Fetches non-flagged questions, optionally filtered by tags, shuffles them, and returns up to `count`. |
 | `getQuestionById(id)` | Single-question lookup by UUID. |
@@ -40,7 +40,7 @@ Quiz session lifecycle: creation, lobby, gameplay, scoring, and cancellation.
 | `getParticipants(sessionId)` | Returns all participants for a session with their player aliases (joined via FK). |
 | `startQuiz(sessionId, questionIds)` | Transitions session to `in_progress`, sets the question list, and records `started_at`. |
 | `nextQuestion(sessionId)` | Increments `current_question_index`. Auto-completes the session when all questions are done. |
-| `submitAnswer(sessionId, questionId, playerId, selectedAnswer, correctAnswer)` | Records an answer, determines correctness, and updates the player's cumulative stats. |
+| `submitAnswer(sessionId, questionId, playerId, selectedAnswer, selectedAnswerData?)` | Records an answer, evaluates correctness server-side using the question's `question_structure`, and updates the player's cumulative stats. Supports structured answer data (`SelectedAnswerData`) for multi-select and sequence question types. |
 | `getAnswersForQuestion(sessionId, questionId)` | Returns all answers submitted for a specific question in a session. |
 | `getPlayerAnswer(sessionId, questionId, playerId)` | Returns a single player's answer for a question, or `null`. |
 | `getScoreboard()` | Global leaderboard of all players with at least one answer, sorted by accuracy then correct count. |
