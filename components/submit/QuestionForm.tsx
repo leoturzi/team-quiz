@@ -24,8 +24,8 @@ const DEFAULT_OPTIONS: Record<Exclude<QuestionType, 'sequence'>, OptionEntry[]> 
     { text: '', isCorrect: false },
   ],
   true_false: [
-    { text: '', isCorrect: true },
-    { text: '', isCorrect: false },
+    { text: 'True', isCorrect: true },
+    { text: 'False', isCorrect: false },
   ],
   multiple_answer: [
     { text: '', isCorrect: true },
@@ -59,12 +59,9 @@ export function QuestionForm({ existingTags, isSubmitting, onSubmit }: QuestionF
 
   const handleTypeChange = (type: QuestionType) => {
     setQuestionType(type)
-    if (type === 'sequence') return
-    setOptions(DEFAULT_OPTIONS[type].map((d, i) => {
-      const existing = options[i]
-      if (!existing) return d
-      return { text: existing.text, isCorrect: d.isCorrect }
-    }))
+    if (type !== 'sequence') {
+      setOptions(DEFAULT_OPTIONS[type])
+    }
   }
 
   const buildStructure = (): QuestionStructure => {
@@ -78,12 +75,25 @@ export function QuestionForm({ existingTags, isSubmitting, onSubmit }: QuestionF
     return { options: options.filter((o) => o.text.trim()) }
   }
 
+  const hasDuplicates = (values: string[]): boolean => {
+    const seen = new Set<string>()
+    for (const v of values) {
+      const normalized = v.trim().toLowerCase()
+      if (!normalized) continue
+      if (seen.has(normalized)) return true
+      seen.add(normalized)
+    }
+    return false
+  }
+
   const isValid = (): boolean => {
     if (!questionText.trim()) return false
     if (questionType === 'sequence') {
-      return sequenceItems.filter((t) => t.trim()).length >= 2
+      const filled = sequenceItems.filter((t) => t.trim())
+      return filled.length >= 2 && !hasDuplicates(sequenceItems)
     }
     const filled = options.filter((o) => o.text.trim())
+    if (hasDuplicates(filled.map((o) => o.text))) return false
     const hasCorrect = filled.some((o) => o.isCorrect)
     if (questionType === 'multiple_choice') return filled.length >= 4 && hasCorrect
     if (questionType === 'true_false') return filled.length >= 2 && hasCorrect

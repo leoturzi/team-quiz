@@ -12,7 +12,25 @@ interface SequenceEditorProps {
 const MIN_ITEMS = 2
 const MAX_ITEMS = 10
 
+function getDuplicateIndices(values: string[]): Set<number> {
+  const seen = new Map<string, number>()
+  const dupes = new Set<number>()
+  values.forEach((v, i) => {
+    const normalized = v.trim().toLowerCase()
+    if (!normalized) return
+    if (seen.has(normalized)) {
+      dupes.add(seen.get(normalized)!)
+      dupes.add(i)
+    } else {
+      seen.set(normalized, i)
+    }
+  })
+  return dupes
+}
+
 export function SequenceEditor({ items, onChange }: SequenceEditorProps) {
+  const duplicates = getDuplicateIndices(items)
+
   const updateItem = (idx: number, text: string) => {
     onChange(items.map((v, i) => (i === idx ? text : v)))
   }
@@ -42,12 +60,17 @@ export function SequenceEditor({ items, onChange }: SequenceEditorProps) {
               <GripVertical className="w-4 h-4" />
             </span>
             <span className="text-sm font-bold text-muted-foreground w-6">{idx + 1}.</span>
-            <Input
-              placeholder={`Item ${idx + 1}`}
-              value={item}
-              onChange={(e) => updateItem(idx, e.target.value)}
-              className="flex-1"
-            />
+            <div className="flex-1">
+              <Input
+                placeholder={`Item ${idx + 1}`}
+                value={item}
+                onChange={(e) => updateItem(idx, e.target.value)}
+                className={duplicates.has(idx) ? 'border-destructive' : ''}
+              />
+              {duplicates.has(idx) && (
+                <p className="text-xs text-destructive mt-1">Duplicate item</p>
+              )}
+            </div>
             {items.length > MIN_ITEMS && (
               <button
                 type="button"

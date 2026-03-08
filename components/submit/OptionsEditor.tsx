@@ -28,8 +28,25 @@ function placeholderFor(type: Exclude<QuestionType, 'sequence'>, idx: number, is
   return `Option ${idx + 1}`
 }
 
+function getDuplicateIndices(values: string[]): Set<number> {
+  const seen = new Map<string, number>()
+  const dupes = new Set<number>()
+  values.forEach((v, i) => {
+    const normalized = v.trim().toLowerCase()
+    if (!normalized) return
+    if (seen.has(normalized)) {
+      dupes.add(seen.get(normalized)!)
+      dupes.add(i)
+    } else {
+      seen.set(normalized, i)
+    }
+  })
+  return dupes
+}
+
 export function OptionsEditor({ questionType, options, onChange }: OptionsEditorProps) {
   const config = TYPE_CONFIG[questionType]
+  const duplicates = getDuplicateIndices(options.map((o) => o.text))
 
   const updateText = (idx: number, text: string) => {
     onChange(options.map((o, i) => (i === idx ? { ...o, text } : o)))
@@ -56,6 +73,39 @@ export function OptionsEditor({ questionType, options, onChange }: OptionsEditor
   const canAdd = options.length < config.max
   const canRemove = options.length > config.min
 
+  if (questionType === 'true_false') {
+    return (
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-foreground">
+          Select the correct answer <span className="text-destructive">*</span>
+        </label>
+        <div className="space-y-3">
+          {options.map((opt, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => toggleCorrect(idx)}
+              className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-all text-left ${
+                opt.isCorrect
+                  ? 'border-success bg-success/10 text-success font-medium'
+                  : 'border-border/50 bg-card hover:border-primary/50 text-foreground'
+              }`}
+            >
+              <span className={`shrink-0 w-6 h-6 rounded flex items-center justify-center border ${
+                opt.isCorrect
+                  ? 'border-success bg-success/20 text-success'
+                  : 'border-border/50 text-muted-foreground'
+              }`}>
+                {opt.isCorrect ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
+              </span>
+              {opt.text}
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   if (config.singleCorrect) {
     const correctIdx = options.findIndex((o) => o.isCorrect)
     const correctOption = options[correctIdx] ?? options[0]
@@ -72,8 +122,12 @@ export function OptionsEditor({ questionType, options, onChange }: OptionsEditor
             placeholder={placeholderFor(questionType, 0, true)}
             value={correctOption.text}
             onChange={(e) => updateText(correctIdx >= 0 ? correctIdx : 0, e.target.value)}
+            className={duplicates.has(correctIdx >= 0 ? correctIdx : 0) ? 'border-destructive' : ''}
             required
           />
+          {duplicates.has(correctIdx >= 0 ? correctIdx : 0) && (
+            <p className="text-xs text-destructive">Duplicate answer</p>
+          )}
         </div>
 
         <div className="space-y-4">
@@ -85,13 +139,18 @@ export function OptionsEditor({ questionType, options, onChange }: OptionsEditor
             {wrongOptions.map((opt, wIdx) => {
               const realIdx = options.indexOf(opt)
               return (
-                <Input
-                  key={realIdx}
-                  placeholder={placeholderFor(questionType, wIdx + 1, false)}
-                  value={opt.text}
-                  onChange={(e) => updateText(realIdx, e.target.value)}
-                  required
-                />
+                <div key={realIdx}>
+                  <Input
+                    placeholder={placeholderFor(questionType, wIdx + 1, false)}
+                    value={opt.text}
+                    onChange={(e) => updateText(realIdx, e.target.value)}
+                    className={duplicates.has(realIdx) ? 'border-destructive' : ''}
+                    required
+                  />
+                  {duplicates.has(realIdx) && (
+                    <p className="text-xs text-destructive mt-1">Duplicate answer</p>
+                  )}
+                </div>
               )
             })}
           </div>
@@ -122,12 +181,17 @@ export function OptionsEditor({ questionType, options, onChange }: OptionsEditor
             >
               {option.isCorrect ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
             </button>
-            <Input
-              placeholder={placeholderFor(questionType, idx, option.isCorrect)}
-              value={option.text}
-              onChange={(e) => updateText(idx, e.target.value)}
-              className="flex-1"
-            />
+            <div className="flex-1">
+              <Input
+                placeholder={placeholderFor(questionType, idx, option.isCorrect)}
+                value={option.text}
+                onChange={(e) => updateText(idx, e.target.value)}
+                className={duplicates.has(idx) ? 'border-destructive' : ''}
+              />
+              {duplicates.has(idx) && (
+                <p className="text-xs text-destructive mt-1">Duplicate option</p>
+              )}
+            </div>
             {canRemove && (
               <button
                 type="button"
