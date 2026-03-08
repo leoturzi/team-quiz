@@ -14,6 +14,7 @@ Each migration file follows the naming convention: `XXX_description.sql`
 - `006_enable_realtime_filters.sql` - Enables RLS with policies for Realtime to work
 - `007_add_cascade_deletes.sql` - Adds cascade delete constraints for session cleanup
 - `008_upgrade_questions_structure.sql` - Adds `question_type` and `question_structure` (JSONB) columns, backfills existing questions, drops legacy flat answer columns, and adds `selected_answer_data` (JSONB) to answers
+- `009_add_question_started_at.sql` - Adds `current_question_started_at` (TIMESTAMPTZ) to `quiz_sessions` so the per-question timer survives page reloads
 
 ## Structure
 
@@ -60,6 +61,7 @@ Migrations should be applied in numerical order:
 6. `006_enable_realtime_filters.sql` (enables RLS policies for Realtime)
 7. `007_add_cascade_deletes.sql` (adds cascade constraints to existing FKs)
 8. `008_upgrade_questions_structure.sql` (adds question_type, question_structure; drops legacy columns)
+9. `009_add_question_started_at.sql` (adds current_question_started_at for timer persistence)
 
 ## Enabling Realtime
 

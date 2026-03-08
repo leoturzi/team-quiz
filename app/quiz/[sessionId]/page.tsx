@@ -43,6 +43,7 @@ export default function QuizPage() {
     answerCount: answers.length,
     participantCount,
     questionIndex: session?.currentQuestionIndex ?? -1,
+    currentQuestionStartedAt: session?.currentQuestionStartedAt,
   })
 
   const displayedQuestionIndexRef = useRef<number>(-1)

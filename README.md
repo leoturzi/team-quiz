@@ -64,7 +64,7 @@ A quiz game where:
 
 4. **Quiz Gameplay**
    - 10 questions per session (configurable)
-   - 60-second timer per question (or until all answer)
+   - 60-second timer per question (or until all answer), persisted server-side via `current_question_started_at` so the timer survives page reloads
    - Dynamic question rendering based on type (buttons, checkboxes, drag-and-drop)
    - Server-side answer evaluation (clients never receive the answer key)
    - Real-time answer tracking
@@ -150,6 +150,7 @@ gdp-quiz-game/
 │   ├── 006_enable_realtime_filters.sql
 │   ├── 007_add_cascade_deletes.sql
 │   ├── 008_upgrade_questions_structure.sql
+│   ├── 009_add_question_started_at.sql
 │   └── README.md
 │
 ├── public/                      # Static assets
@@ -192,7 +193,7 @@ gdp-quiz-game/
      NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
      NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
      ```
-   - Run migrations in order — see `migrations/README.md` (001 through 008)
+   - Run migrations in order — see `migrations/README.md` (001 through 009)
 
 4. **Run the development server**
    ```bash
@@ -323,7 +324,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
   - **Multiple Choice / True/False**: Shuffled option buttons
   - **Multiple Answer**: Checkbox selection with lock-in
   - **Sequence**: Drag-and-drop ordering
-- 60-second countdown timer with time bomb mechanic
+- 60-second countdown timer with time bomb mechanic (server-anchored — survives reloads)
 - Answer tracking (X/Y participants answered)
 - Results phase:
   - Correct answer highlighted
@@ -344,7 +345,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 1. **Question Pool**: All submitted questions form a shared pool
 2. **Quiz Size**: Each quiz consists of 10 randomly selected questions
-3. **Time Limit**: 60 seconds per question, or until everyone answers
+3. **Time Limit**: 60 seconds per question (server-anchored, survives page reloads), or until everyone answers
 4. **Scoring**: 1 point per correct answer (no speed bonus)
 5. **Aliases**: Players use consistent aliases across sessions for score tracking
 6. **Anonymity**: No real names required
