@@ -58,10 +58,15 @@ export function QuestionForm({ existingTags, isSubmitting, onSubmit }: QuestionF
   const [sequenceItems, setSequenceItems] = useState<string[]>(DEFAULT_SEQUENCE_ITEMS)
 
   const handleTypeChange = (type: QuestionType) => {
+    const previousType = questionType
     setQuestionType(type)
     if (type === 'sequence') return
     if (type === 'true_false') {
       setOptions(DEFAULT_OPTIONS.true_false)
+      return
+    }
+    if (previousType === 'true_false') {
+      setOptions(DEFAULT_OPTIONS[type])
       return
     }
     setOptions(DEFAULT_OPTIONS[type].map((d, i) => {
