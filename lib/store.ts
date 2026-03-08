@@ -94,10 +94,6 @@ class QuizStore {
       questionText: question.questionText,
       questionType: question.questionType,
       questionStructure: question.questionStructure,
-      correctAnswer: question.correctAnswer,
-      wrongAnswer1: question.wrongAnswer1,
-      wrongAnswer2: question.wrongAnswer2,
-      wrongAnswer3: question.wrongAnswer3,
       tags: question.tags,
     })
     this.questions.set(newQuestion.id, newQuestion)
@@ -278,7 +274,6 @@ class QuizStore {
     questionId: string,
     playerId: string,
     selectedAnswer: string,
-    _correctAnswer?: string,
     selectedAnswerData?: SelectedAnswerData
   ): Promise<Answer> {
     const answer = await quizActions.submitAnswer(
@@ -286,7 +281,6 @@ class QuizStore {
       questionId,
       playerId,
       selectedAnswer,
-      undefined,
       selectedAnswerData
     )
     this.answers.set(answer.id, answer)

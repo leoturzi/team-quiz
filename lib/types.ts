@@ -27,14 +27,6 @@ export interface Question {
   questionText: string
   questionType: QuestionType
   questionStructure: QuestionStructure
-  /** @deprecated Use questionStructure.options instead */
-  correctAnswer: string
-  /** @deprecated Use questionStructure.options instead */
-  wrongAnswer1: string
-  /** @deprecated Use questionStructure.options instead */
-  wrongAnswer2: string
-  /** @deprecated Use questionStructure.options instead */
-  wrongAnswer3: string
   tags: string[]
   flagged: boolean
   flagReason?: string
@@ -90,7 +82,7 @@ export interface ScoreboardEntry {
 export function getCorrectAnswerText(question: Question): string {
   if (question.questionType === 'sequence') return ''
   const structure = question.questionStructure as { options: QuestionOption[] }
-  return structure.options.find((o) => o.isCorrect)?.text ?? question.correctAnswer
+  return structure.options.find((o) => o.isCorrect)?.text ?? ''
 }
 
 export function getOptionTexts(question: Question): string[] {

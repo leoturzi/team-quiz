@@ -30,7 +30,7 @@ This page is the **in-game experience** for a quiz session. Players arrive here 
 
 1. **Load** → Session + current question + participants
 2. **Subscribe** → Realtime updates for session, participants, answers
-3. **Answer phase** → Player selects one of 4 shuffled options; timer counts down
+3. **Answer phase** → Dynamic UI based on question type (buttons, checkboxes, or drag-and-drop); timer counts down
 4. **Results phase** → Triggered by: timer reaching 0 **or** all participants having answered
 5. **Host advances** → Next question, or Finish Quiz on last question
 6. **Completion** → Session scoreboard, links to global scoreboard and home
@@ -124,9 +124,16 @@ The page stays in sync across all participants via **Supabase Realtime** (`postg
 
 ### Answer Phase
 
-- 4 options, shuffled per question (different order per load)
-- One tap = locked in; no changes after submit
-- After answering: “Answer locked in! Waiting for other participants...”
+Rendering adapts to the question’s `questionType` via `QuestionRenderer` (factory component in `components/quiz/`):
+
+| Question Type | Renderer | Interaction |
+|---------------|----------|-------------|
+| `multiple_choice` | `MultipleChoiceRenderer` | 4 shuffled option buttons; one tap = locked in |
+| `true_false` | `MultipleChoiceRenderer` | 2 option buttons; one tap = locked in |
+| `multiple_answer` | `MultipleAnswerRenderer` | Checkboxes with explicit "Lock In" confirmation |
+| `sequence` | `SequenceRenderer` | Drag-and-drop ordering via `@dnd-kit`; explicit "Lock In" confirmation |
+
+After answering: "Answer locked in! Waiting for other participants..."
 
 ### Results Phase
 
@@ -150,7 +157,8 @@ The page stays in sync across all participants via **Supabase Realtime** (`postg
 
 ### Submission
 
-- `store.submitAnswer()` writes to `answers` table
+- `store.submitAnswer()` writes to `answers` table with optional `selectedAnswerData` for structured types
+- Server evaluates correctness using the question's `question_structure` (clients never see the answer key)
 - Server updates player stats (`total_questions_answered`, `total_correct_answers`)
 - Store refreshes answers for the question to update distribution
 
@@ -202,9 +210,13 @@ Question content is **fixed when the quiz starts** (chosen in the lobby with cou
 | Dependency | Role |
 |------------|------|
 | `hooks/use-quiz-timer.ts` | Timer countdown, time bomb deductions, auto-results |
+| `components/quiz/QuestionRenderer.tsx` | Factory component that switches on `questionType` to render the correct UI |
+| `components/quiz/MultipleChoiceRenderer.tsx` | Shuffled option buttons for MC and True/False |
+| `components/quiz/MultipleAnswerRenderer.tsx` | Checkbox multi-select with lock-in |
+| `components/quiz/SequenceRenderer.tsx` | Drag-and-drop ordering via `@dnd-kit` |
 | `lib/store.ts` | Cache, `subscribeToSession()`, `subscribe()`, actions for session/answers |
-| `lib/types.ts` | `QuizSession`, `Question`, `Answer`, `ScoreboardEntry`, etc. |
-| `actions/quiz.ts` | Server actions: `nextQuestion`, `submitAnswer`, `cancelQuizSession`, etc. |
+| `lib/types.ts` | `QuizSession`, `Question`, `QuestionType`, `QuestionStructure`, `SelectedAnswerData`, `Answer`, `ScoreboardEntry`, etc. |
+| `actions/quiz.ts` | Server actions: `nextQuestion`, `submitAnswer` (server-side evaluation), `cancelQuizSession`, etc. |
 | `actions/questions.ts` | `getQuestionById`, `flagQuestion` |
 | `lib/supabase/client.ts` | Supabase client for Realtime |
 | `migrations/006_enable_realtime_filters.sql` | RLS + REPLICA IDENTITY for `quiz_sessions`, `quiz_participants`, `answers` |
@@ -217,7 +229,7 @@ Question content is **fixed when the quiz starts** (chosen in the lobby with cou
 |-------|---------|
 | `session` | Current session; null after cancel |
 | `currentQuestion` | Active question object |
-| `shuffledAnswers` | Shuffled options + correct index |
+| `shuffledAnswers` | Shuffled options + correct index (for MC/TF types) |
 | `playerId` / `isHost` | Identity and role |
 | `selectedAnswer` / `hasAnswered` | Answer status for current user |
 | `showResults` | Whether results view is shown (from `useQuizTimer`) |

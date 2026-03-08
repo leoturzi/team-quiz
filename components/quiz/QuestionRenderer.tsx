@@ -7,6 +7,15 @@ import { MultipleAnswerRenderer } from './MultipleAnswerRenderer'
 import { SequenceRenderer } from './SequenceRenderer'
 import { useMemo } from 'react'
 
+function parseArrayAnswer(raw: string | null): string[] {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) return parsed
+  } catch { /* not JSON, fall through */ }
+  return []
+}
+
 interface QuestionRendererProps {
   question: Question
   selectedAnswer: string | null
@@ -45,11 +54,11 @@ export function QuestionRenderer({
   }
 
   const handleMultipleAnswers = (selectedAnswers: string[]) => {
-    onAnswer(selectedAnswers.join(', '), { type: 'multiple', values: selectedAnswers })
+    onAnswer(JSON.stringify(selectedAnswers), { type: 'multiple', values: selectedAnswers })
   }
 
   const handleSequenceOrder = (order: string[]) => {
-    onAnswer(order.join(' → '), { type: 'sequence', order })
+    onAnswer(JSON.stringify(order), { type: 'sequence', order })
   }
 
   switch (question.questionType) {
@@ -70,7 +79,7 @@ export function QuestionRenderer({
       return (
         <MultipleAnswerRenderer
           question={question}
-          selectedAnswers={selectedAnswer ? selectedAnswer.split(', ') : []}
+          selectedAnswers={parseArrayAnswer(selectedAnswer)}
           hasAnswered={hasAnswered}
           showResults={showResults}
           onSubmitAnswers={handleMultipleAnswers}
@@ -82,7 +91,7 @@ export function QuestionRenderer({
       return (
         <SequenceRenderer
           question={question}
-          selectedOrder={selectedAnswer ? selectedAnswer.split(' → ') : []}
+          selectedOrder={parseArrayAnswer(selectedAnswer)}
           hasAnswered={hasAnswered}
           showResults={showResults}
           onSubmitOrder={handleSequenceOrder}

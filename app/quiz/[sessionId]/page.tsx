@@ -177,7 +177,6 @@ export default function QuizPage() {
         currentQuestion.id,
         playerId,
         answer,
-        undefined,
         answerData
       )
       await store.refreshAnswersForQuestion(sessionId, currentQuestion.id)

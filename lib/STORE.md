@@ -363,7 +363,7 @@ useEffect(() => {
 
 | Method                             | Description                |
 |------------------------------------|----------------------------|
-| `addQuestion(question)`            | Submit a new question      |
+| `addQuestion(question)`            | Submit a new question (requires `questionType` and `questionStructure`) |
 | `getQuestions()`                   | Get all cached questions   |
 | `getQuestionById(id)`              | Get question from cache    |
 | `getRandomQuestions(count, tags?)` | Fetch random questions     |
@@ -394,7 +394,7 @@ useEffect(() => {
 
 | Method | Description |
 |--------|-------------|
-| `submitAnswer(...)` | Submit an answer |
+| `submitAnswer(sessionId, questionId, playerId, selectedAnswer, selectedAnswerData?)` | Submit an answer. Correctness is evaluated server-side. Pass `selectedAnswerData` for multi-select and sequence types. |
 | `getAnswersForQuestion(sessionId, questionId)` | Get answers for a question |
 | `getPlayerAnswer(sessionId, questionId, playerId)` | Get specific player's answer |
 | `refreshAnswersForQuestion(...)` | Fetch answers from server |

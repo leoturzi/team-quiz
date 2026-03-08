@@ -33,8 +33,24 @@ ALTER TABLE answers
 -- 5. Create index on question_type for filtering
 CREATE INDEX IF NOT EXISTS idx_questions_type ON questions(question_type);
 
+-- 6. Drop legacy flat columns (data now lives in question_structure)
+ALTER TABLE questions DROP COLUMN IF EXISTS correct_answer;
+ALTER TABLE questions DROP COLUMN IF EXISTS wrong_answer_1;
+ALTER TABLE questions DROP COLUMN IF EXISTS wrong_answer_2;
+ALTER TABLE questions DROP COLUMN IF EXISTS wrong_answer_3;
 
--- Revert migration
+
+-- Revert migration (run these statements in order to undo)
+-- ALTER TABLE questions ADD COLUMN correct_answer VARCHAR(500);
+-- ALTER TABLE questions ADD COLUMN wrong_answer_1 VARCHAR(500);
+-- ALTER TABLE questions ADD COLUMN wrong_answer_2 VARCHAR(500);
+-- ALTER TABLE questions ADD COLUMN wrong_answer_3 VARCHAR(500);
+-- UPDATE questions SET
+--   correct_answer = (question_structure->'options'->0->>'text'),
+--   wrong_answer_1 = (question_structure->'options'->1->>'text'),
+--   wrong_answer_2 = (question_structure->'options'->2->>'text'),
+--   wrong_answer_3 = (question_structure->'options'->3->>'text')
+-- WHERE question_type IN ('multiple_choice', 'true_false', 'multiple_answer');
 -- ALTER TABLE answers DROP COLUMN IF EXISTS selected_answer_data;
 -- DROP INDEX IF EXISTS idx_questions_type;
 -- ALTER TABLE questions DROP COLUMN IF EXISTS question_structure;

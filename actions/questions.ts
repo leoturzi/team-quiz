@@ -4,63 +4,15 @@ import { createClient } from '@/lib/supabase/server'
 import type { Question, QuestionType, QuestionStructure } from '@/lib/types'
 
 function mapRowToQuestion(q: any): Question {
-  const questionType: QuestionType = q.question_type || 'multiple_choice'
-
-  let questionStructure: QuestionStructure = q.question_structure
-  if (!questionStructure) {
-    questionStructure = {
-      options: [
-        { text: q.correct_answer, isCorrect: true },
-        { text: q.wrong_answer_1, isCorrect: false },
-        { text: q.wrong_answer_2, isCorrect: false },
-        { text: q.wrong_answer_3, isCorrect: false },
-      ],
-    }
-  }
-
   return {
     id: q.id,
     questionText: q.question_text,
-    questionType,
-    questionStructure,
-    correctAnswer: q.correct_answer ?? '',
-    wrongAnswer1: q.wrong_answer_1 ?? '',
-    wrongAnswer2: q.wrong_answer_2 ?? '',
-    wrongAnswer3: q.wrong_answer_3 ?? '',
+    questionType: q.question_type || 'multiple_choice',
+    questionStructure: q.question_structure,
     tags: q.tags || [],
     flagged: q.flagged || false,
     flagReason: q.flag_reason || undefined,
     createdAt: new Date(q.created_at),
-  }
-}
-
-/**
- * Build the flat legacy columns from the structured data so old columns
- * stay in sync during the transition period.
- */
-function buildLegacyColumns(
-  questionType: QuestionType,
-  structure: QuestionStructure
-): { correct_answer: string; wrong_answer_1: string; wrong_answer_2: string; wrong_answer_3: string } {
-  if (questionType === 'sequence') {
-    const items = (structure as { items: { text: string; correctPosition: number }[] }).items
-    return {
-      correct_answer: items.map((i) => i.text).join(' → '),
-      wrong_answer_1: '',
-      wrong_answer_2: '',
-      wrong_answer_3: '',
-    }
-  }
-
-  const options = (structure as { options: { text: string; isCorrect: boolean }[] }).options
-  const correct = options.find((o) => o.isCorrect)?.text ?? ''
-  const wrong = options.filter((o) => !o.isCorrect).map((o) => o.text)
-
-  return {
-    correct_answer: correct,
-    wrong_answer_1: wrong[0] ?? '',
-    wrong_answer_2: wrong[1] ?? '',
-    wrong_answer_3: wrong[2] ?? '',
   }
 }
 
@@ -70,43 +22,17 @@ function buildLegacyColumns(
 export async function submitQuestion(data: {
   questionText: string
   questionType?: QuestionType
-  questionStructure?: QuestionStructure
-  correctAnswer?: string
-  wrongAnswer1?: string
-  wrongAnswer2?: string
-  wrongAnswer3?: string
+  questionStructure: QuestionStructure
   tags?: string[]
 }): Promise<Question> {
   const supabase = await createClient()
-
-  const questionType: QuestionType = data.questionType || 'multiple_choice'
-
-  let questionStructure: QuestionStructure
-  if (data.questionStructure) {
-    questionStructure = data.questionStructure
-  } else {
-    questionStructure = {
-      options: [
-        { text: data.correctAnswer || '', isCorrect: true },
-        { text: data.wrongAnswer1 || '', isCorrect: false },
-        { text: data.wrongAnswer2 || '', isCorrect: false },
-        { text: data.wrongAnswer3 || '', isCorrect: false },
-      ],
-    }
-  }
-
-  const legacy = buildLegacyColumns(questionType, questionStructure)
 
   const { data: question, error } = await supabase
     .from('questions')
     .insert({
       question_text: data.questionText,
-      question_type: questionType,
-      question_structure: questionStructure,
-      correct_answer: legacy.correct_answer,
-      wrong_answer_1: legacy.wrong_answer_1,
-      wrong_answer_2: legacy.wrong_answer_2,
-      wrong_answer_3: legacy.wrong_answer_3,
+      question_type: data.questionType || 'multiple_choice',
+      question_structure: data.questionStructure,
       tags: data.tags || [],
       flagged: false,
     })

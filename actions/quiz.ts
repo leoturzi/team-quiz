@@ -363,14 +363,13 @@ export async function submitAnswer(
   questionId: string,
   playerId: string,
   selectedAnswer: string,
-  _correctAnswer?: string,
   selectedAnswerData?: SelectedAnswerData
 ): Promise<Answer> {
   const supabase = await createClient()
 
   const { data: questionRow, error: qError } = await supabase
     .from('questions')
-    .select('question_type, question_structure, correct_answer')
+    .select('question_type, question_structure')
     .eq('id', questionId)
     .single()
 
@@ -379,9 +378,7 @@ export async function submitAnswer(
   }
 
   const questionType: QuestionType = questionRow.question_type || 'multiple_choice'
-  const questionStructure: QuestionStructure = questionRow.question_structure || {
-    options: [{ text: questionRow.correct_answer, isCorrect: true }],
-  }
+  const questionStructure: QuestionStructure = questionRow.question_structure
 
   const answerData: SelectedAnswerData = selectedAnswerData || {
     type: 'single',
