@@ -45,12 +45,19 @@ export function useQuizTimer({
   const prevAnswerCountRef = useRef(0)
   const bombVisualTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [prevQuestionIndex, setPrevQuestionIndex] = useState(questionIndex)
+  const [prevQuestionId, setPrevQuestionId] = useState<string | null>(currentQuestion?.id ?? null)
 
   // Reset state synchronously during render when question changes.
   // Using the "adjust state during render" pattern (not useEffect) so the
   // stale showResults=true is never committed to the DOM.
-  if (questionIndex !== prevQuestionIndex) {
+  const questionId = currentQuestion?.id ?? null
+
+  // Reset when question index OR question identity changes.
+  // This covers the case where the session index updates before the
+  // question payload has been loaded from the store.
+  if (questionIndex !== prevQuestionIndex || questionId !== prevQuestionId) {
     setPrevQuestionIndex(questionIndex)
+    setPrevQuestionId(questionId)
     const remaining = computeRemainingSeconds(duration, currentQuestionStartedAt)
     setTimeLeft(remaining)
     setShowResults(remaining <= 0)
