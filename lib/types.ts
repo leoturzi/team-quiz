@@ -30,6 +30,7 @@ export interface Question {
   tags: string[]
   flagged: boolean
   flagReason?: string
+  timeLimitSeconds: number
   createdAt: Date
 }
 

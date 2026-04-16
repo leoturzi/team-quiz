@@ -348,7 +348,9 @@ export default function QuizPage() {
               ) : (
                 <Clock className="w-4 h-4" />
               )}
-              {timeLeft}s
+              {timeLeft >= 60
+                ? `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, '0')}`
+                : `${timeLeft}s`}
             </div>
             {isHost && (
               <Button
