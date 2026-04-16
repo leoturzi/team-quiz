@@ -24,4 +24,5 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
-next-env.d.tssupabase/.temp/
+next-env.d.ts
+supabase/.temp/

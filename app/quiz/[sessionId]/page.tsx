@@ -17,6 +17,7 @@ import {
 import { store } from '@/lib/store'
 import { useQuizTimer } from '@/hooks/use-quiz-timer'
 import { QuestionRenderer } from '@/components/quiz/QuestionRenderer'
+import { MarkdownRenderer } from '@/components/quiz/MarkdownRenderer'
 import type { QuizSession, Question, Answer, ScoreboardEntry, SelectedAnswerData } from '@/lib/types'
 import { Flag, ArrowRight, Users, Trophy, Clock, Home, XCircle, Zap } from 'lucide-react'
 
@@ -382,9 +383,9 @@ export default function QuizPage() {
                 </span>
               )}
             </div>
-            <p className="text-xl font-medium text-foreground text-center text-balance">
-              {currentQuestion.questionText}
-            </p>
+            <div className="text-xl font-medium text-foreground text-center text-balance">
+              <MarkdownRenderer content={currentQuestion.questionText} />
+            </div>
           </CardContent>
         </Card>
 

@@ -8,6 +8,7 @@ import { Tag, Clock } from 'lucide-react'
 import type { QuestionType, QuestionStructure } from '@/lib/types'
 import { OptionsEditor, type OptionEntry } from './OptionsEditor'
 import { SequenceEditor } from './SequenceEditor'
+import { MarkdownRenderer } from '@/components/quiz/MarkdownRenderer'
 
 const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   multiple_choice: 'Multiple Choice',
@@ -159,12 +160,20 @@ export function QuestionForm({ existingTags, isSubmitting, onSubmit }: QuestionF
           Question <span className="text-destructive">*</span>
         </label>
         <Textarea
-          placeholder="What programming concept or topic would you like to ask about?"
+          placeholder={"What programming concept or topic would you like to ask about?\nUse ```<language> for code blocks.\nEg. ```js function myFunction()..."}
           value={questionText}
           onChange={(e) => setQuestionText(e.target.value)}
-          className="min-h-[100px] resize-none"
+          className="min-h-[100px] resize-none font-mono text-sm"
           required
         />
+        {questionText.trim() && (
+          <div className="space-y-1">
+            <span className="text-xs text-muted-foreground">Preview</span>
+            <div className="rounded-lg border border-border/50 bg-card p-4 max-h-64 overflow-y-auto">
+              <MarkdownRenderer content={questionText} />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Type-specific answer editor */}
@@ -200,9 +209,14 @@ export function QuestionForm({ existingTags, isSubmitting, onSubmit }: QuestionF
             <Input
               type="number"
               min={0}
-              max={59}
+              max={45}
+              step={15}
               value={timeLimitExtraSeconds}
-              onChange={(e) => setTimeLimitExtraSeconds(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+              onChange={(e) => {
+                const raw = parseInt(e.target.value) || 0
+                const clamped = Math.max(0, Math.min(45, Math.round(raw / 15) * 15))
+                setTimeLimitExtraSeconds(clamped)
+              }}
               className="w-20 text-center"
             />
             <span className="text-sm text-muted-foreground">sec</span>
