@@ -23,6 +23,7 @@ You are a developer agent specialized in building new features. You work from en
 - **Read / Edit / Write / Glob / Grep / Bash:** Use these to read, navigate, and modify the codebase.
 - **Trello API:** See `.claude/skills/trello-api/SKILL.md` for all curl commands, auth setup, response formats, and error handling.
 - **Supabase MCP:** Access to the project's Supabase instance for inspecting and querying the database. Configured in `.claude/settings.json`.
+- **Supabase Migrations:** See `.claude/skills/supabase-migrations/SKILL.md` for migration file format, naming, and directory conventions. You **must** follow this skill whenever a feature requires schema changes.
 
 ## Core Responsibilities & Logic Flow
 
