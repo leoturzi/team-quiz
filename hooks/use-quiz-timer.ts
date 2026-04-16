@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import type { Question } from '@/lib/types'
 
-export const QUESTION_DURATION_SECONDS = 60
+const DEFAULT_QUESTION_DURATION_SECONDS = 60
 const TIME_BOMB_PENALTY_SECONDS = 5
 const TIME_BOMB_THRESHOLD_RATIO = 0.25
 const TIME_BOMB_VISUAL_MS = 1800
@@ -23,10 +23,10 @@ interface UseQuizTimerReturn {
   timeBombPulse: number
 }
 
-function computeRemainingSeconds(startedAt?: Date | null): number {
-  if (!startedAt) return QUESTION_DURATION_SECONDS
+function computeRemainingSeconds(duration: number, startedAt?: Date | null): number {
+  if (!startedAt) return duration
   const elapsed = Math.floor((Date.now() - startedAt.getTime()) / 1000)
-  return Math.max(0, QUESTION_DURATION_SECONDS - elapsed)
+  return Math.max(0, duration - elapsed)
 }
 
 export function useQuizTimer({
@@ -36,21 +36,29 @@ export function useQuizTimer({
   questionIndex,
   currentQuestionStartedAt,
 }: UseQuizTimerParams): UseQuizTimerReturn {
-  const [timeLeft, setTimeLeft] = useState(() => computeRemainingSeconds(currentQuestionStartedAt))
-  const [showResults, setShowResults] = useState(() => computeRemainingSeconds(currentQuestionStartedAt) <= 0)
+  const duration = currentQuestion?.timeLimitSeconds ?? DEFAULT_QUESTION_DURATION_SECONDS
+  const [timeLeft, setTimeLeft] = useState(() => computeRemainingSeconds(duration, currentQuestionStartedAt))
+  const [showResults, setShowResults] = useState(() => computeRemainingSeconds(duration, currentQuestionStartedAt) <= 0)
   const [timeBombFlash, setTimeBombFlash] = useState(false)
   const [timeBombPulse, setTimeBombPulse] = useState(0)
 
   const prevAnswerCountRef = useRef(0)
   const bombVisualTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [prevQuestionIndex, setPrevQuestionIndex] = useState(questionIndex)
+  const [prevQuestionId, setPrevQuestionId] = useState<string | null>(currentQuestion?.id ?? null)
 
   // Reset state synchronously during render when question changes.
   // Using the "adjust state during render" pattern (not useEffect) so the
   // stale showResults=true is never committed to the DOM.
-  if (questionIndex !== prevQuestionIndex) {
+  const questionId = currentQuestion?.id ?? null
+
+  // Reset when question index OR question identity changes.
+  // This covers the case where the session index updates before the
+  // question payload has been loaded from the store.
+  if (questionIndex !== prevQuestionIndex || questionId !== prevQuestionId) {
     setPrevQuestionIndex(questionIndex)
-    const remaining = computeRemainingSeconds(currentQuestionStartedAt)
+    setPrevQuestionId(questionId)
+    const remaining = computeRemainingSeconds(duration, currentQuestionStartedAt)
     setTimeLeft(remaining)
     setShowResults(remaining <= 0)
     setTimeBombFlash(false)

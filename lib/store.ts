@@ -95,6 +95,7 @@ class QuizStore {
       questionType: question.questionType,
       questionStructure: question.questionStructure,
       tags: question.tags,
+      timeLimitSeconds: question.timeLimitSeconds,
     })
     this.questions.set(newQuestion.id, newQuestion)
     this.notify()

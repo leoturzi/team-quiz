@@ -50,6 +50,7 @@ export default function SubmitPage() {
         questionType: data.questionType,
         questionStructure: data.questionStructure,
         tags: data.tags,
+        timeLimitSeconds: data.timeLimitSeconds,
       })
       setSubmitted(true)
     } catch {

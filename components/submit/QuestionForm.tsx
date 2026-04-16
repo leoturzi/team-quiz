@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Tag } from 'lucide-react'
+import { Tag, Clock } from 'lucide-react'
 import type { QuestionType, QuestionStructure } from '@/lib/types'
 import { OptionsEditor, type OptionEntry } from './OptionsEditor'
 import { SequenceEditor } from './SequenceEditor'
@@ -42,6 +42,7 @@ export interface QuestionFormData {
   questionType: QuestionType
   questionStructure: QuestionStructure
   tags: string[]
+  timeLimitSeconds: number
 }
 
 interface QuestionFormProps {
@@ -56,6 +57,8 @@ export function QuestionForm({ existingTags, isSubmitting, onSubmit }: QuestionF
   const [tags, setTags] = useState('')
   const [options, setOptions] = useState<OptionEntry[]>(DEFAULT_OPTIONS.multiple_choice)
   const [sequenceItems, setSequenceItems] = useState<string[]>(DEFAULT_SEQUENCE_ITEMS)
+  const [timeLimitMinutes, setTimeLimitMinutes] = useState(1)
+  const [timeLimitExtraSeconds, setTimeLimitExtraSeconds] = useState(0)
 
   const handleTypeChange = (type: QuestionType) => {
     setQuestionType(type)
@@ -86,8 +89,11 @@ export function QuestionForm({ existingTags, isSubmitting, onSubmit }: QuestionF
     return false
   }
 
+  const totalTimeLimitSeconds = timeLimitMinutes * 60 + timeLimitExtraSeconds
+
   const isValid = (): boolean => {
     if (!questionText.trim()) return false
+    if (totalTimeLimitSeconds < 1) return false
     if (questionType === 'sequence') {
       const filled = sequenceItems.filter((t) => t.trim())
       return filled.length >= 2 && !hasDuplicates(sequenceItems)
@@ -111,6 +117,7 @@ export function QuestionForm({ existingTags, isSubmitting, onSubmit }: QuestionF
       questionType,
       questionStructure: buildStructure(),
       tags: parsedTags,
+      timeLimitSeconds: totalTimeLimitSeconds,
     })
   }
 
@@ -170,6 +177,41 @@ export function QuestionForm({ existingTags, isSubmitting, onSubmit }: QuestionF
           onChange={setOptions}
         />
       )}
+
+      {/* Time Limit */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-foreground flex items-center gap-2">
+          <Clock className="w-4 h-4 text-muted-foreground" />
+          Time Limit
+        </label>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              min={0}
+              max={59}
+              value={timeLimitMinutes}
+              onChange={(e) => setTimeLimitMinutes(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+              className="w-20 text-center"
+            />
+            <span className="text-sm text-muted-foreground">min</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              min={0}
+              max={59}
+              value={timeLimitExtraSeconds}
+              onChange={(e) => setTimeLimitExtraSeconds(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+              className="w-20 text-center"
+            />
+            <span className="text-sm text-muted-foreground">sec</span>
+          </div>
+        </div>
+        {totalTimeLimitSeconds < 1 && (
+          <p className="text-xs text-destructive">Time limit must be at least 1 second.</p>
+        )}
+      </div>
 
       {/* Tags */}
       <div className="space-y-2">

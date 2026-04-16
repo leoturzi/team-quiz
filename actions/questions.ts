@@ -12,6 +12,7 @@ function mapRowToQuestion(q: any): Question {
     tags: q.tags || [],
     flagged: q.flagged || false,
     flagReason: q.flag_reason || undefined,
+    timeLimitSeconds: q.time_limit_seconds ?? 60,
     createdAt: new Date(q.created_at),
   }
 }
@@ -24,6 +25,7 @@ export async function submitQuestion(data: {
   questionType?: QuestionType
   questionStructure: QuestionStructure
   tags?: string[]
+  timeLimitSeconds?: number
 }): Promise<Question> {
   const supabase = await createClient()
 
@@ -35,6 +37,7 @@ export async function submitQuestion(data: {
       question_structure: data.questionStructure,
       tags: data.tags || [],
       flagged: false,
+      time_limit_seconds: data.timeLimitSeconds ?? 60,
     })
     .select()
     .single()
