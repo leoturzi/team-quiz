@@ -8,6 +8,7 @@ import { Tag, Clock } from 'lucide-react'
 import type { QuestionType, QuestionStructure } from '@/lib/types'
 import { OptionsEditor, type OptionEntry } from './OptionsEditor'
 import { SequenceEditor } from './SequenceEditor'
+import { MarkdownRenderer } from '@/components/quiz/MarkdownRenderer'
 
 const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   multiple_choice: 'Multiple Choice',
@@ -159,12 +160,20 @@ export function QuestionForm({ existingTags, isSubmitting, onSubmit }: QuestionF
           Question <span className="text-destructive">*</span>
         </label>
         <Textarea
-          placeholder="What programming concept or topic would you like to ask about?"
+          placeholder="What programming concept or topic would you like to ask about? Supports markdown — use triple backticks for code blocks."
           value={questionText}
           onChange={(e) => setQuestionText(e.target.value)}
-          className="min-h-[100px] resize-none"
+          className="min-h-[100px] resize-none font-mono text-sm"
           required
         />
+        {questionText.trim() && (
+          <div className="space-y-1">
+            <span className="text-xs text-muted-foreground">Preview</span>
+            <div className="rounded-lg border border-border/50 bg-card p-4 max-h-64 overflow-y-auto">
+              <MarkdownRenderer content={questionText} />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Type-specific answer editor */}
