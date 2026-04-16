@@ -160,7 +160,7 @@ export function QuestionForm({ existingTags, isSubmitting, onSubmit }: QuestionF
           Question <span className="text-destructive">*</span>
         </label>
         <Textarea
-          placeholder="What programming concept or topic would you like to ask about? Supports markdown — use triple backticks for code blocks."
+          placeholder={"What programming concept or topic would you like to ask about?\nUse ```<language> for code blocks.\nEg. ```js function myFunction()..."}
           value={questionText}
           onChange={(e) => setQuestionText(e.target.value)}
           className="min-h-[100px] resize-none font-mono text-sm"

@@ -13,16 +13,20 @@ interface MarkdownRendererProps {
 }
 
 const components: Components = {
-  code({ className, children, ...props }) {
-    const match = /language-(\w+)/.exec(className || '')
+  pre({ children }) {
+    return <>{children}</>
+  },
+  code({ className, children }) {
     const codeString = String(children).replace(/\n$/, '')
+    const langMatch = /language-(\w+)/.exec(className || '')
 
-    if (match) {
+    if (langMatch || codeString.includes('\n')) {
       return (
         <SyntaxHighlighter
           style={oneDark}
-          language={match[1]}
+          language={langMatch?.[1] ?? 'text'}
           PreTag="div"
+          customStyle={{ borderRadius: '0.5rem', fontSize: '0.875rem' }}
         >
           {codeString}
         </SyntaxHighlighter>
@@ -30,22 +34,16 @@ const components: Components = {
     }
 
     return (
-      <code
-        className="px-1.5 py-0.5 rounded bg-muted text-sm font-mono"
-        {...props}
-      >
+      <code className="px-1.5 py-0.5 rounded bg-muted text-sm font-mono">
         {children}
       </code>
     )
-  },
-  pre({ children }) {
-    return <>{children}</>
   },
 }
 
 export function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
   return (
-    <div className={`prose prose-invert max-w-none wrap-break-word ${className ?? ''}`}>
+    <div className={`max-w-none wrap-break-word text-foreground [&>*+*]:mt-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:border-muted [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground ${className ?? ''}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkBreaks]}
         components={components}
