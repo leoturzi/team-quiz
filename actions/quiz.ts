@@ -359,6 +359,33 @@ export async function nextQuestion(sessionId: string): Promise<void> {
 }
 
 /**
+ * Finish the current question early — host-only action.
+ * Validates the session is in progress and returns the current question index
+ * so the caller can broadcast the event to participants.
+ */
+export async function finishCurrentQuestion(
+  sessionId: string
+): Promise<{ questionIndex: number }> {
+  const supabase = await createClient()
+
+  const { data: session, error } = await supabase
+    .from('quiz_sessions')
+    .select('current_question_index, status')
+    .eq('id', sessionId)
+    .single()
+
+  if (error || !session) {
+    throw new Error('Session not found')
+  }
+
+  if (session.status !== 'in_progress') {
+    throw new Error('Session is not in progress')
+  }
+
+  return { questionIndex: session.current_question_index }
+}
+
+/**
  * Submit an answer — correctness is evaluated server-side.
  *
  * For backward compatibility, `selectedAnswer` (string) still works for
@@ -373,6 +400,21 @@ export async function submitAnswer(
   selectedAnswerData?: SelectedAnswerData
 ): Promise<Answer> {
   const supabase = await createClient()
+
+  const { data: sessionRow, error: sessionError } = await supabase
+    .from('quiz_sessions')
+    .select('current_question_index, question_ids')
+    .eq('id', sessionId)
+    .single()
+
+  if (sessionError || !sessionRow) {
+    throw new Error('Session not found')
+  }
+
+  const currentQuestionId = sessionRow.question_ids?.[sessionRow.current_question_index]
+  if (currentQuestionId !== questionId) {
+    throw new Error('Cannot submit answer for a question that is no longer active')
+  }
 
   const { data: questionRow, error: qError } = await supabase
     .from('questions')

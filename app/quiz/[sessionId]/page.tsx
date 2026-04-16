@@ -19,7 +19,7 @@ import { useQuizTimer } from '@/hooks/use-quiz-timer'
 import { QuestionRenderer } from '@/components/quiz/QuestionRenderer'
 import { MarkdownRenderer } from '@/components/quiz/MarkdownRenderer'
 import type { QuizSession, Question, Answer, ScoreboardEntry, SelectedAnswerData } from '@/lib/types'
-import { Flag, ArrowRight, Users, Trophy, Clock, Home, XCircle, Zap } from 'lucide-react'
+import { Flag, ArrowRight, Users, Trophy, Clock, Home, XCircle, Zap, StopCircle } from 'lucide-react'
 
 export default function QuizPage() {
   const params = useParams()
@@ -38,6 +38,10 @@ export default function QuizPage() {
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
   const [isAdvancing, setIsAdvancing] = useState(false)
+  const [isFinishing, setIsFinishing] = useState(false)
+
+  const questionForceEnded =
+    store.getForceEndedQuestionIndex(sessionId) === (session?.currentQuestionIndex ?? -1)
 
   const { timeLeft, showResults, timeBombActive, timeBombFlash, timeBombPulse } = useQuizTimer({
     currentQuestion,
@@ -45,6 +49,7 @@ export default function QuizPage() {
     participantCount,
     questionIndex: session?.currentQuestionIndex ?? -1,
     currentQuestionStartedAt: session?.currentQuestionStartedAt,
+    forceEnded: questionForceEnded,
   })
 
   const displayedQuestionIndexRef = useRef<number>(-1)
@@ -201,6 +206,18 @@ export default function QuizPage() {
     }
   }
 
+  const handleFinishQuestion = async () => {
+    if (!session || !isHost || isFinishing || showResults) return
+    setIsFinishing(true)
+    try {
+      await store.finishCurrentQuestion(sessionId)
+    } catch (error) {
+      console.error('Failed to finish question:', error)
+    } finally {
+      setIsFinishing(false)
+    }
+  }
+
   const handleFlagQuestion = async () => {
     if (!currentQuestion) return
     try {
@@ -353,6 +370,18 @@ export default function QuizPage() {
                 ? `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, '0')}`
                 : `${timeLeft}s`}
             </div>
+            {isHost && !showResults && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleFinishQuestion}
+                disabled={isFinishing}
+                className="cursor-pointer"
+              >
+                <StopCircle className="w-4 h-4" />
+                {isFinishing ? 'Finishing...' : 'Finish Question'}
+              </Button>
+            )}
             {isHost && (
               <Button
                 variant="outline"

@@ -22,7 +22,7 @@ A quiz game where:
 - **Styling**: Tailwind CSS 4.x
 - **UI Components**: shadcn/ui (Radix UI primitives)
 - **State Management**: Supabase with server actions
-- **Real-time**: Supabase Realtime subscriptions
+- **Real-time**: Supabase Realtime (postgres_changes + Broadcast)
 - **Deployment**: Vercel (with Analytics)
 
 ## Current Implementation Status
@@ -65,6 +65,7 @@ A quiz game where:
 4. **Quiz Gameplay**
    - 10 questions per session (configurable)
    - 60-second timer per question (or until all answer), persisted server-side via `current_question_started_at` so the timer survives page reloads
+   - Host can finish the current question early ("Finish Question" button) — stops the timer, locks answers, and reveals results for all participants via Supabase Realtime Broadcast
    - Dynamic question rendering based on type (buttons, checkboxes, drag-and-drop)
    - Server-side answer evaluation (clients never receive the answer key)
    - Real-time answer tracking
@@ -249,6 +250,7 @@ npm start
 2. **Start the Quiz**
    - Wait for participants to join
    - Click "Start Quiz" when ready
+   - Use "Finish Question" to end the current question early (stops timer and locks answers for all participants)
    - Control the pace by clicking "Next Question" after each question
 
 3. **Manage the Session**
@@ -325,6 +327,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
   - **Multiple Answer**: Checkbox selection with lock-in
   - **Sequence**: Drag-and-drop ordering
 - 60-second countdown timer with time bomb mechanic (server-anchored — survives reloads)
+- Host: "Finish Question" button to end the current question early
 - Answer tracking (X/Y participants answered)
 - Results phase:
   - Correct answer highlighted
@@ -345,7 +348,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 1. **Question Pool**: All submitted questions form a shared pool
 2. **Quiz Size**: Each quiz consists of 10 randomly selected questions
-3. **Time Limit**: 60 seconds per question (server-anchored, survives page reloads), or until everyone answers
+3. **Time Limit**: 60 seconds per question (server-anchored, survives page reloads), or until everyone answers, or host finishes early
 4. **Scoring**: 1 point per correct answer (no speed bonus)
 5. **Aliases**: Players use consistent aliases across sessions for score tracking
 6. **Anonymity**: No real names required
