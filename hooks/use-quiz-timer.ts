@@ -13,6 +13,7 @@ interface UseQuizTimerParams {
   participantCount: number
   questionIndex: number
   currentQuestionStartedAt?: Date | null
+  forceEnded?: boolean
 }
 
 interface UseQuizTimerReturn {
@@ -35,6 +36,7 @@ export function useQuizTimer({
   participantCount,
   questionIndex,
   currentQuestionStartedAt,
+  forceEnded,
 }: UseQuizTimerParams): UseQuizTimerReturn {
   const duration = currentQuestion?.timeLimitSeconds ?? DEFAULT_QUESTION_DURATION_SECONDS
   const [timeLeft, setTimeLeft] = useState(() => computeRemainingSeconds(duration, currentQuestionStartedAt))
@@ -69,6 +71,13 @@ export function useQuizTimer({
     }
     prevAnswerCountRef.current = 0
   }
+
+  // Host force-ended the question — immediately expire the timer
+  useEffect(() => {
+    if (forceEnded && !showResults) {
+      setTimeLeft(0)
+    }
+  }, [forceEnded, showResults])
 
   // Base countdown (1s tick)
   useEffect(() => {

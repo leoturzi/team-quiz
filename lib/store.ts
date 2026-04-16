@@ -23,6 +23,7 @@ class QuizStore {
   // Realtime subscriptions
   private supabase = createClient()
   private activeChannels: Map<string, RealtimeChannel> = new Map()
+  private forceEndedQuestionIndices: Map<string, number> = new Map()
 
   constructor() {
     // Questions will be loaded on-demand when needed
@@ -218,6 +219,26 @@ class QuizStore {
     // Realtime can overwrite cache with correct index before we return; a local
     // increment on top of that would skip a question (e.g. 1 → 3 instead of 2).
     await this.refreshSession(sessionId)
+  }
+
+  getForceEndedQuestionIndex(sessionId: string): number | null {
+    return this.forceEndedQuestionIndices.get(sessionId) ?? null
+  }
+
+  async finishCurrentQuestion(sessionId: string): Promise<void> {
+    const { questionIndex } = await quizActions.finishCurrentQuestion(sessionId)
+
+    this.forceEndedQuestionIndices.set(sessionId, questionIndex)
+    this.notify()
+
+    const channel = this.activeChannels.get(sessionId)
+    if (channel) {
+      await channel.send({
+        type: 'broadcast',
+        event: 'finish_question',
+        payload: { questionIndex },
+      })
+    }
   }
 
   async cancelSession(sessionId: string): Promise<void> {
@@ -462,6 +483,17 @@ class QuizStore {
               answeredAt: new Date(answerData.answered_at),
             }
             this.answers.set(answer.id, answer)
+            this.notify()
+          }
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'finish_question' },
+        (payload) => {
+          const questionIndex = payload.payload?.questionIndex
+          if (typeof questionIndex === 'number') {
+            this.forceEndedQuestionIndices.set(sessionId, questionIndex)
             this.notify()
           }
         }
