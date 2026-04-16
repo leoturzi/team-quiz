@@ -209,9 +209,14 @@ export function QuestionForm({ existingTags, isSubmitting, onSubmit }: QuestionF
             <Input
               type="number"
               min={0}
-              max={59}
+              max={45}
+              step={15}
               value={timeLimitExtraSeconds}
-              onChange={(e) => setTimeLimitExtraSeconds(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+              onChange={(e) => {
+                const raw = parseInt(e.target.value) || 0
+                const clamped = Math.max(0, Math.min(45, Math.round(raw / 15) * 15))
+                setTimeLimitExtraSeconds(clamped)
+              }}
               className="w-20 text-center"
             />
             <span className="text-sm text-muted-foreground">sec</span>
